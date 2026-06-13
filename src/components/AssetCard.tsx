@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Star, Eye, User, Database, Network } from 'lucide-react';
+import { Star, Eye, User, Database, Network, GitCompare } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { DataAsset } from '@/types';
 import SensitivityBadge from './SensitivityBadge';
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function AssetCard({ asset, index }: Props) {
-  const { toggleFavorite, setShowApplyModal } = useAppStore();
+  const { toggleFavorite, setShowApplyModal, addToCompare, isInCompare, compareIds, setShowComparePanel } = useAppStore();
   const owner = owners.find((o) => o.id === asset.ownerId);
   const dept = departments.find((d) => d.id === asset.departmentId);
   const TypeIcon = typeConfig[asset.type].icon;
@@ -62,6 +62,22 @@ export default function AssetCard({ asset, index }: Props) {
             )}
           >
             <Star className={cn('w-4 h-4', asset.isFavorite && 'fill-current')} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              addToCompare(asset.id);
+              setShowComparePanel(true);
+            }}
+            className={cn(
+              'p-2 rounded-lg transition-all flex-shrink-0',
+              isInCompare(asset.id)
+                ? 'bg-violet-500/10 text-violet-400 hover:bg-violet-500/20'
+                : 'bg-white/[0.03] text-slate-500 hover:text-violet-400 hover:bg-white/[0.06]'
+            )}
+            title={isInCompare(asset.id) ? '已加入对比' : '加入对比'}
+          >
+            <GitCompare className="w-4 h-4" />
           </button>
         </div>
 

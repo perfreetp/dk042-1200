@@ -5,6 +5,7 @@ import AssetDetail from '@/pages/AssetDetail';
 import LineageView from '@/pages/LineageView';
 import Ranking from '@/pages/Ranking';
 import Applications from '@/pages/Applications';
+import ComparePanel from '@/components/ComparePanel';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="*" element={<AssetMap />} />
         </Routes>
       </Layout>
+      <ComparePanel />
     </Router>
   );
 }

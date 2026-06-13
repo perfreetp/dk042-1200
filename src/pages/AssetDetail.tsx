@@ -19,13 +19,14 @@ import {
   Eye,
   Clock,
   ChevronRight,
+  GitCompare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function AssetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getAssetById, toggleFavorite, setShowApplyModal } = useAppStore();
+  const { getAssetById, toggleFavorite, setShowApplyModal, addToCompare, isInCompare, setShowComparePanel } = useAppStore();
 
   const asset = id ? getAssetById(id) : undefined;
 
@@ -147,6 +148,19 @@ export default function AssetDetail() {
               <Network className="w-4 h-4" />
               查看血缘
             </Link>
+            <button
+              onClick={() => {
+                addToCompare(asset.id);
+                setShowComparePanel(true);
+              }}
+              className={cn(
+                'btn-ghost flex items-center justify-center gap-2 py-3',
+                isInCompare(asset.id) && '!bg-violet-500/10 !border-violet-500/30 !text-violet-300'
+              )}
+            >
+              <GitCompare className="w-4 h-4" />
+              {isInCompare(asset.id) ? '已加入对比' : '加入对比'}
+            </button>
           </div>
         </div>
       </div>

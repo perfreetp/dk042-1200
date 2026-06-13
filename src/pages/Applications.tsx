@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import StatusBadge from '@/components/StatusBadge';
 import ApplyModal from '@/components/ApplyModal';
@@ -11,16 +11,20 @@ import {
   XCircle,
   Clock,
   ChevronDown,
-  ChevronUp,
   MessageSquare,
   Calendar,
   User,
   Send,
   Check,
   X,
+  Search,
+  ArrowUpRight,
+  X as XIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+
+type TimeRange = '7d' | '30d' | '90d' | 'all';
 
 const filterTabs: { key: 'all' | ApplicationStatus; label: string; icon: typeof Clock }[] = [
   { key: 'all', label: '全部', icon: FileText },
@@ -29,6 +33,137 @@ const filterTabs: { key: 'all' | ApplicationStatus; label: string; icon: typeof 
   { key: 'rejected', label: '已驳回', icon: XCircle },
 ];
 
+const timeRangeOptions: { key: TimeRange; label: string }[] = [
+  { key: '7d', label: '近7天' },
+  { key: '30d', label: '近30天' },
+  { key: '90d', label: '近90天' },
+  { key: 'all', label: '全部' },
+];
+
+function getTimeRangeMs(range: TimeRange): number | null {
+  if (range === 'all') return null;
+  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
+  return days * 24 * 60 * 60 * 1000;
+}
+
+function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (t: string) => string }) {
+  const isApproved = app.status === 'approved';
+  const isRejected = app.status === 'rejected';
+  const isPending = app.status === 'pending';
+
+  const purposeSummary = app.purpose.length > 40 ? app.purpose.slice(0, 40) + '...' : app.purpose;
+
+  return (
+    <div className="relative pl-8">
+      <div className="absolute left-[11px] top-2 bottom-2 w-px bg-white/[0.08]" />
+
+      <div className="relative pb-6">
+        <div
+          className={cn(
+            'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
+            'bg-blue-500/20 border-2 border-blue-400'
+          )}
+        >
+          <ArrowUpRight className="w-3 h-3 text-blue-400" />
+        </div>
+        <div className="ml-2">
+          <div className="text-sm font-medium text-blue-300 mb-1">提交申请</div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+            <span className="flex items-center gap-1">
+              <User className="w-3 h-3 text-cyan-400" />
+              {app.applicantName}
+            </span>
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-violet-400" />
+              {formatDate(app.submitTime)}
+            </span>
+          </div>
+          <div className="mt-1.5 text-xs text-slate-500 bg-white/[0.02] rounded-lg px-3 py-2 border border-white/[0.04]">
+            {purposeSummary}
+          </div>
+        </div>
+      </div>
+
+      {isPending ? (
+        <div className="relative">
+          <div
+            className={cn(
+              'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
+              'bg-amber-500/10 border-2 border-dashed border-amber-400/60'
+            )}
+          >
+            <Clock className="w-3 h-3 text-amber-400" />
+          </div>
+          <div className="ml-2">
+            <div className="text-sm font-medium text-amber-300 mb-1">等待审批中</div>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden max-w-[120px]">
+                <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 animate-pulse" />
+              </div>
+              <span>审批进行中...</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="relative">
+          <div
+            className={cn(
+              'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
+              isApproved && 'bg-emerald-500/20 border-2 border-emerald-400',
+              isRejected && 'bg-rose-500/20 border-2 border-rose-400'
+            )}
+          >
+            {isApproved && <Check className="w-3 h-3 text-emerald-400" />}
+            {isRejected && <X className="w-3 h-3 text-rose-400" />}
+          </div>
+          <div className="ml-2">
+            <div
+              className={cn(
+                'text-sm font-medium mb-1',
+                isApproved ? 'text-emerald-300' : 'text-rose-300'
+              )}
+            >
+              {isApproved ? '审批通过' : '审批驳回'}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+              {app.approverName && (
+                <span className="flex items-center gap-1">
+                  <User className="w-3 h-3 text-cyan-400" />
+                  {app.approverName}
+                </span>
+              )}
+              {app.approvalTime && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-violet-400" />
+                  {formatDate(app.approvalTime)}
+                </span>
+              )}
+            </div>
+            {app.approvalComment && (
+              <div
+                className={cn(
+                  'mt-1.5 text-xs rounded-lg px-3 py-2 border',
+                  isApproved
+                    ? 'bg-emerald-500/5 border-emerald-500/20 text-slate-300'
+                    : 'bg-rose-500/5 border-rose-500/20 text-slate-300'
+                )}
+              >
+                {app.approvalComment}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface FilterTag {
+  key: string;
+  label: string;
+  onClear: () => void;
+}
+
 export default function Applications() {
   const { applications, submitApplication, setShowApplyModal, approveApplication, rejectApplication } = useAppStore();
   const [filter, setFilter] = useState<'all' | ApplicationStatus>('all');
@@ -36,15 +171,77 @@ export default function Applications() {
   const [replyComment, setReplyComment] = useState('');
   const [replyId, setReplyId] = useState<string | null>(null);
 
-  const filtered = applications.filter(
-    (a) => filter === 'all' || a.status === filter
-  );
+  const [applicantSearch, setApplicantSearch] = useState('');
+  const [assetSearch, setAssetSearch] = useState('');
+  const [timeRange, setTimeRange] = useState<TimeRange>('all');
 
-  const counts = {
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    const rangeMs = getTimeRangeMs(timeRange);
+
+    return applications.filter((a) => {
+      if (filter !== 'all' && a.status !== filter) return false;
+
+      if (applicantSearch.trim()) {
+        const kw = applicantSearch.trim().toLowerCase();
+        if (!a.applicantName.toLowerCase().includes(kw)) return false;
+      }
+
+      if (assetSearch.trim()) {
+        const kw = assetSearch.trim().toLowerCase();
+        if (!a.assetName.toLowerCase().includes(kw)) return false;
+      }
+
+      if (rangeMs !== null) {
+        const submitMs = new Date(a.submitTime.replace(/-/g, '/')).getTime();
+        if (now - submitMs > rangeMs) return false;
+      }
+
+      return true;
+    });
+  }, [applications, filter, applicantSearch, assetSearch, timeRange]);
+
+  const counts = useMemo(() => ({
     all: applications.length,
     pending: applications.filter((a) => a.status === 'pending').length,
     approved: applications.filter((a) => a.status === 'approved').length,
     rejected: applications.filter((a) => a.status === 'rejected').length,
+  }), [applications]);
+
+  const filterTags: FilterTag[] = useMemo(() => {
+    const tags: FilterTag[] = [];
+    if (applicantSearch.trim()) {
+      tags.push({
+        key: 'applicant',
+        label: `申请人: ${applicantSearch.trim()}`,
+        onClear: () => setApplicantSearch(''),
+      });
+    }
+    if (assetSearch.trim()) {
+      tags.push({
+        key: 'asset',
+        label: `资产: ${assetSearch.trim()}`,
+        onClear: () => setAssetSearch(''),
+      });
+    }
+    if (timeRange !== 'all') {
+      const label = timeRangeOptions.find((o) => o.key === timeRange)?.label ?? '';
+      tags.push({
+        key: 'timeRange',
+        label: `时间: ${label}`,
+        onClear: () => setTimeRange('all'),
+      });
+    }
+    return tags;
+  }, [applicantSearch, assetSearch, timeRange]);
+
+  const hasActiveFilters = filterTags.length > 0;
+
+  const clearAllFilters = () => {
+    setApplicantSearch('');
+    setAssetSearch('');
+    setTimeRange('all');
+    setFilter('all');
   };
 
   const handleApprove = (app: Application) => {
@@ -118,6 +315,84 @@ export default function Applications() {
             </button>
           );
         })}
+      </div>
+
+      <div className="glass-card gradient-border p-4 space-y-4 fade-in-up">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              value={applicantSearch}
+              onChange={(e) => setApplicantSearch(e.target.value)}
+              placeholder="搜索申请人..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500/40 transition-all"
+            />
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              value={assetSearch}
+              onChange={(e) => setAssetSearch(e.target.value)}
+              placeholder="搜索资产名..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500/40 transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-500 mr-1">时间范围：</span>
+          {timeRangeOptions.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setTimeRange(opt.key)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                timeRange === opt.key
+                  ? 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-300'
+                  : 'bg-white/[0.03] border border-white/[0.06] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.06]">
+            <span className="text-xs text-slate-500">筛选条件：</span>
+            {filterTags.map((tag) => (
+              <span
+                key={tag.key}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-cyan-500/10 border border-cyan-500/20 text-cyan-300"
+              >
+                {tag.label}
+                <button
+                  onClick={tag.onClear}
+                  className="w-3.5 h-3.5 rounded-full flex items-center justify-center hover:bg-cyan-500/20 transition-colors"
+                >
+                  <XIcon className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+            <button
+              onClick={clearAllFilters}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors ml-2"
+            >
+              清除全部
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+          <span className="text-xs text-slate-500">
+            共 <span className="text-cyan-300 font-medium">{filtered.length}</span> 条结果
+          </span>
+          {hasActiveFilters && (
+            <span className="text-[10px] text-slate-600">已启用多维筛选</span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -209,58 +484,36 @@ export default function Applications() {
                 </div>
 
                 {isExpanded && (
-                  <div className="px-5 pb-5 pt-2 border-t border-white/[0.06] space-y-4 fade-in-up">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <div className="px-5 pb-5 pt-2 border-t border-white/[0.06] space-y-5 fade-in-up">
+                    <div className="grid md:grid-cols-2 gap-5">
+                      <div>
+                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                           <MessageSquare className="w-3.5 h-3.5" />
-                          申请用途
+                          审批时间线
                         </div>
-                        <p className="text-sm text-slate-300 leading-relaxed">{app.purpose}</p>
+                        <ApprovalTimeline app={app} formatDate={formatDate} />
                       </div>
 
-                      {app.approvalComment ? (
-                        <div
-                          className={cn(
-                            'p-4 rounded-xl border',
-                            app.status === 'approved'
-                              ? 'bg-emerald-500/5 border-emerald-500/20'
-                              : 'bg-rose-500/5 border-rose-500/20'
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              'text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5',
-                              app.status === 'approved' ? 'text-emerald-400' : 'text-rose-400'
-                            )}
-                          >
-                            {app.status === 'approved' ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
-                            审批意见
-                          </div>
-                          <p className="text-sm text-slate-300 leading-relaxed mb-2">{app.approvalComment}</p>
-                          {app.approvalTime && (
-                            <div className="text-[10px] text-slate-500">
-                              {app.approverName} · {formatDate(app.approvalTime)}
-                            </div>
-                          )}
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5" />
+                          申请详情
                         </div>
-                      ) : (
-                        <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                          <div className="text-xs text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5" />
-                            审批进度
+                        <div className="space-y-3">
+                          <div>
+                            <div className="text-[10px] text-slate-600 mb-1">申请用途</div>
+                            <p className="text-sm text-slate-300 leading-relaxed">{app.purpose}</p>
                           </div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="flex-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                              <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-amber-400 to-orange-400" />
-                            </div>
-                            <span className="text-xs text-amber-300 font-medium">50%</span>
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            已提交申请，等待数据负责人审批中...
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="text-slate-500">
+                              使用期限：<span className="text-slate-300">{app.duration}</span>
+                            </span>
+                            <span className="text-slate-500">
+                              资产：<span className="text-slate-300">{app.assetName}</span>
+                            </span>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {app.status === 'pending' && (

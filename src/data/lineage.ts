@@ -1,286 +1,125 @@
-import type { LineageData } from '@/types';
+import type { LineageData, LineageNode, LineageEdge } from '@/types';
 
-export const lineageMap: Record<string, LineageData> = {
-  'asset-001': {
-    centerAssetId: 'asset-001',
-    nodes: [
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: 0 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 1 },
-      { id: 'asset-005', name: 'api_user_profile', type: 'api', layer: 1 },
-      { id: 'asset-007', name: 'rpt_user_growth_daily', type: 'report', layer: 1 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 2 },
-      { id: 'asset-008', name: 'dwd_risk_event_log', type: 'table', layer: 2 },
-    ],
-    edges: [
-      { from: 'asset-001', to: 'asset-002' },
-      { from: 'asset-001', to: 'asset-005' },
-      { from: 'asset-001', to: 'asset-007' },
-      { from: 'asset-002', to: 'asset-003' },
-      { from: 'asset-005', to: 'asset-008' },
-    ],
-  },
-  'asset-002': {
-    centerAssetId: 'asset-002',
-    nodes: [
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 0 },
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: -1 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: -1 },
-      { id: 'asset-007', name: 'rpt_user_growth_daily', type: 'report', layer: 1 },
-      { id: 'asset-005', name: 'api_user_profile', type: 'api', layer: 1 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 1 },
-      { id: 'asset-011', name: 'rpt_marketing_campaign_effect', type: 'report', layer: 2 },
-    ],
-    edges: [
-      { from: 'asset-001', to: 'asset-002' },
-      { from: 'asset-003', to: 'asset-002' },
-      { from: 'asset-002', to: 'asset-007' },
-      { from: 'asset-002', to: 'asset-005' },
-      { from: 'asset-002', to: 'asset-004' },
-      { from: 'asset-004', to: 'asset-011' },
-    ],
-  },
-  'asset-003': {
-    centerAssetId: 'asset-003',
-    nodes: [
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 0 },
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: -1 },
-      { id: 'asset-010', name: 'ods_goods_info', type: 'table', layer: -1 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 1 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 2 },
-      { id: 'asset-013', name: 'api_goods_search', type: 'api', layer: -2 },
-    ],
-    edges: [
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-010', to: 'asset-003' },
-      { from: 'asset-010', to: 'asset-013' },
-      { from: 'asset-003', to: 'asset-002' },
-      { from: 'asset-002', to: 'asset-004' },
-    ],
-  },
-  'asset-004': {
-    centerAssetId: 'asset-004',
-    nodes: [
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 0 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: -1 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: -2 },
-      { id: 'asset-010', name: 'ods_goods_info', type: 'table', layer: -3 },
-      { id: 'asset-011', name: 'rpt_marketing_campaign_effect', type: 'report', layer: 1 },
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: -3 },
-    ],
-    edges: [
-      { from: 'asset-002', to: 'asset-004' },
-      { from: 'asset-003', to: 'asset-002' },
-      { from: 'asset-010', to: 'asset-003' },
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-004', to: 'asset-011' },
-    ],
-  },
-  'asset-005': {
-    centerAssetId: 'asset-005',
-    nodes: [
-      { id: 'asset-005', name: 'api_user_profile', type: 'api', layer: 0 },
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: -2 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: -1 },
-      { id: 'asset-014', name: 'dwd_log_behavior', type: 'table', layer: -1 },
-      { id: 'asset-008', name: 'dwd_risk_event_log', type: 'table', layer: 1 },
-      { id: 'asset-009', name: 'api_risk_assessment', type: 'api', layer: 2 },
-      { id: 'asset-007', name: 'rpt_user_growth_daily', type: 'report', layer: -2 },
-    ],
-    edges: [
-      { from: 'asset-001', to: 'asset-002' },
-      { from: 'asset-001', to: 'asset-007' },
-      { from: 'asset-002', to: 'asset-005' },
-      { from: 'asset-014', to: 'asset-005' },
-      { from: 'asset-005', to: 'asset-008' },
-      { from: 'asset-008', to: 'asset-009' },
-    ],
-  },
-  'asset-006': {
-    centerAssetId: 'asset-006',
-    nodes: [
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: 0 },
-      { id: 'asset-015', name: 'ods_hr_employee_salary', type: 'table', layer: -1 },
-      { id: 'asset-012', name: 'dws_hr_employee_dim', type: 'table', layer: -2 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 1 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 2 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 2 },
-    ],
-    edges: [
-      { from: 'asset-015', to: 'asset-006' },
-      { from: 'asset-015', to: 'asset-012' },
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-003', to: 'asset-004' },
-      { from: 'asset-003', to: 'asset-002' },
-    ],
-  },
-  'asset-007': {
-    centerAssetId: 'asset-007',
-    nodes: [
-      { id: 'asset-007', name: 'rpt_user_growth_daily', type: 'report', layer: 0 },
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: -1 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: -1 },
-      { id: 'asset-014', name: 'dwd_log_behavior', type: 'table', layer: -1 },
-      { id: 'asset-011', name: 'rpt_marketing_campaign_effect', type: 'report', layer: 1 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 1 },
-    ],
-    edges: [
-      { from: 'asset-001', to: 'asset-007' },
-      { from: 'asset-002', to: 'asset-007' },
-      { from: 'asset-014', to: 'asset-007' },
-      { from: 'asset-007', to: 'asset-011' },
-      { from: 'asset-007', to: 'asset-004' },
-    ],
-  },
-  'asset-008': {
-    centerAssetId: 'asset-008',
-    nodes: [
-      { id: 'asset-008', name: 'dwd_risk_event_log', type: 'table', layer: 0 },
-      { id: 'asset-005', name: 'api_user_profile', type: 'api', layer: -1 },
-      { id: 'asset-014', name: 'dwd_log_behavior', type: 'table', layer: -1 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: -2 },
-      { id: 'asset-009', name: 'api_risk_assessment', type: 'api', layer: 1 },
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: -3 },
-    ],
-    edges: [
-      { from: 'asset-005', to: 'asset-008' },
-      { from: 'asset-014', to: 'asset-008' },
-      { from: 'asset-002', to: 'asset-005' },
-      { from: 'asset-001', to: 'asset-002' },
-      { from: 'asset-008', to: 'asset-009' },
-    ],
-  },
-  'asset-009': {
-    centerAssetId: 'asset-009',
-    nodes: [
-      { id: 'asset-009', name: 'api_risk_assessment', type: 'api', layer: 0 },
-      { id: 'asset-008', name: 'dwd_risk_event_log', type: 'table', layer: -1 },
-      { id: 'asset-005', name: 'api_user_profile', type: 'api', layer: -2 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: -3 },
-      { id: 'asset-014', name: 'dwd_log_behavior', type: 'table', layer: -2 },
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: -4 },
-    ],
-    edges: [
-      { from: 'asset-008', to: 'asset-009' },
-      { from: 'asset-005', to: 'asset-008' },
-      { from: 'asset-014', to: 'asset-008' },
-      { from: 'asset-002', to: 'asset-005' },
-      { from: 'asset-001', to: 'asset-002' },
-    ],
-  },
-  'asset-010': {
-    centerAssetId: 'asset-010',
-    nodes: [
-      { id: 'asset-010', name: 'ods_goods_info', type: 'table', layer: 0 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 1 },
-      { id: 'asset-013', name: 'api_goods_search', type: 'api', layer: 1 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 2 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 3 },
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: 1 },
-    ],
-    edges: [
-      { from: 'asset-010', to: 'asset-003' },
-      { from: 'asset-010', to: 'asset-013' },
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-003', to: 'asset-002' },
-      { from: 'asset-002', to: 'asset-004' },
-    ],
-  },
-  'asset-011': {
-    centerAssetId: 'asset-011',
-    nodes: [
-      { id: 'asset-011', name: 'rpt_marketing_campaign_effect', type: 'report', layer: 0 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: -1 },
-      { id: 'asset-007', name: 'rpt_user_growth_daily', type: 'report', layer: -1 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: -2 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: -3 },
-      { id: 'asset-001', name: 'ods_user_info', type: 'table', layer: -3 },
-    ],
-    edges: [
-      { from: 'asset-004', to: 'asset-011' },
-      { from: 'asset-007', to: 'asset-011' },
-      { from: 'asset-002', to: 'asset-004' },
-      { from: 'asset-002', to: 'asset-007' },
-      { from: 'asset-001', to: 'asset-002' },
-      { from: 'asset-003', to: 'asset-002' },
-    ],
-  },
-  'asset-012': {
-    centerAssetId: 'asset-012',
-    nodes: [
-      { id: 'asset-012', name: 'dws_hr_employee_dim', type: 'table', layer: 0 },
-      { id: 'asset-015', name: 'ods_hr_employee_salary', type: 'table', layer: -1 },
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: 1 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 2 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 3 },
-    ],
-    edges: [
-      { from: 'asset-015', to: 'asset-012' },
-      { from: 'asset-015', to: 'asset-006' },
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-003', to: 'asset-004' },
-    ],
-  },
-  'asset-013': {
-    centerAssetId: 'asset-013',
-    nodes: [
-      { id: 'asset-013', name: 'api_goods_search', type: 'api', layer: 0 },
-      { id: 'asset-010', name: 'ods_goods_info', type: 'table', layer: -1 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 1 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 2 },
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: 1 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 3 },
-    ],
-    edges: [
-      { from: 'asset-010', to: 'asset-013' },
-      { from: 'asset-010', to: 'asset-003' },
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-003', to: 'asset-002' },
-      { from: 'asset-002', to: 'asset-004' },
-    ],
-  },
-  'asset-014': {
-    centerAssetId: 'asset-014',
-    nodes: [
-      { id: 'asset-014', name: 'dwd_log_behavior', type: 'table', layer: 0 },
-      { id: 'asset-005', name: 'api_user_profile', type: 'api', layer: 1 },
-      { id: 'asset-007', name: 'rpt_user_growth_daily', type: 'report', layer: 1 },
-      { id: 'asset-008', name: 'dwd_risk_event_log', type: 'table', layer: 2 },
-      { id: 'asset-009', name: 'api_risk_assessment', type: 'api', layer: 3 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 2 },
-    ],
-    edges: [
-      { from: 'asset-014', to: 'asset-005' },
-      { from: 'asset-014', to: 'asset-007' },
-      { from: 'asset-014', to: 'asset-008' },
-      { from: 'asset-005', to: 'asset-002' },
-      { from: 'asset-008', to: 'asset-009' },
-    ],
-  },
-  'asset-015': {
-    centerAssetId: 'asset-015',
-    nodes: [
-      { id: 'asset-015', name: 'ods_hr_employee_salary', type: 'table', layer: 0 },
-      { id: 'asset-006', name: 'ods_finance_payment', type: 'table', layer: 1 },
-      { id: 'asset-012', name: 'dws_hr_employee_dim', type: 'table', layer: 1 },
-      { id: 'asset-003', name: 'ods_order_detail', type: 'table', layer: 2 },
-      { id: 'asset-004', name: 'rpt_monthly_sales', type: 'report', layer: 3 },
-      { id: 'asset-002', name: 'dws_user_order_summary', type: 'table', layer: 3 },
-    ],
-    edges: [
-      { from: 'asset-015', to: 'asset-006' },
-      { from: 'asset-015', to: 'asset-012' },
-      { from: 'asset-006', to: 'asset-003' },
-      { from: 'asset-003', to: 'asset-004' },
-      { from: 'asset-003', to: 'asset-002' },
-    ],
-  },
+export const globalEdges: LineageEdge[] = [
+  { from: 'asset-001', to: 'asset-002' },
+  { from: 'asset-003', to: 'asset-002' },
+  { from: 'asset-001', to: 'asset-005' },
+  { from: 'asset-002', to: 'asset-007' },
+  { from: 'asset-002', to: 'asset-004' },
+  { from: 'asset-004', to: 'asset-011' },
+  { from: 'asset-007', to: 'asset-011' },
+  { from: 'asset-005', to: 'asset-008' },
+  { from: 'asset-014', to: 'asset-005' },
+  { from: 'asset-014', to: 'asset-007' },
+  { from: 'asset-014', to: 'asset-008' },
+  { from: 'asset-008', to: 'asset-009' },
+  { from: 'asset-010', to: 'asset-003' },
+  { from: 'asset-010', to: 'asset-013' },
+  { from: 'asset-003', to: 'asset-006' },
+  { from: 'asset-006', to: 'asset-004' },
+  { from: 'asset-015', to: 'asset-012' },
+  { from: 'asset-015', to: 'asset-006' },
+  { from: 'asset-002', to: 'asset-005' },
+];
+
+export const assetMeta: Record<string, { name: string; type: 'table' | 'report' | 'api' }> = {
+  'asset-001': { name: 'ods_user_info', type: 'table' },
+  'asset-002': { name: 'dws_user_order_summary', type: 'table' },
+  'asset-003': { name: 'ods_order_detail', type: 'table' },
+  'asset-004': { name: 'rpt_monthly_sales', type: 'report' },
+  'asset-005': { name: 'api_user_profile', type: 'api' },
+  'asset-006': { name: 'ods_finance_payment', type: 'table' },
+  'asset-007': { name: 'rpt_user_growth_daily', type: 'report' },
+  'asset-008': { name: 'dwd_risk_event_log', type: 'table' },
+  'asset-009': { name: 'api_risk_assessment', type: 'api' },
+  'asset-010': { name: 'ods_goods_info', type: 'table' },
+  'asset-011': { name: 'rpt_marketing_campaign_effect', type: 'report' },
+  'asset-012': { name: 'dws_hr_employee_dim', type: 'table' },
+  'asset-013': { name: 'api_goods_search', type: 'api' },
+  'asset-014': { name: 'dwd_log_behavior', type: 'table' },
+  'asset-015': { name: 'ods_hr_employee_salary', type: 'table' },
 };
 
-export const getLineageData = (assetId: string): LineageData => {
-  if (lineageMap[assetId]) return lineageMap[assetId];
-  return {
-    centerAssetId: assetId,
-    nodes: [{ id: assetId, name: assetId, type: 'table', layer: 0 }],
-    edges: [],
-  };
-};
+const downstreamMap = new Map<string, string[]>();
+const upstreamMap = new Map<string, string[]>();
+
+for (const edge of globalEdges) {
+  let ds = downstreamMap.get(edge.from);
+  if (!ds) {
+    ds = [];
+    downstreamMap.set(edge.from, ds);
+  }
+  ds.push(edge.to);
+
+  let us = upstreamMap.get(edge.to);
+  if (!us) {
+    us = [];
+    upstreamMap.set(edge.to, us);
+  }
+  us.push(edge.from);
+}
+
+export function computeLineage(centerAssetId: string, maxDepth: number): LineageData {
+  const nodeLayers = new Map<string, number>();
+  nodeLayers.set(centerAssetId, 0);
+
+  const upQueue: [string, number][] = [[centerAssetId, 0]];
+  while (upQueue.length > 0) {
+    const [id, depth] = upQueue.shift()!;
+    if (depth >= maxDepth) continue;
+    const parents = upstreamMap.get(id);
+    if (!parents) continue;
+    for (const p of parents) {
+      if (!nodeLayers.has(p)) {
+        const newLayer = -(depth + 1);
+        nodeLayers.set(p, newLayer);
+        upQueue.push([p, depth + 1]);
+      }
+    }
+  }
+
+  const downQueue: [string, number][] = [[centerAssetId, 0]];
+  while (downQueue.length > 0) {
+    const [id, depth] = downQueue.shift()!;
+    if (depth >= maxDepth) continue;
+    const children = downstreamMap.get(id);
+    if (!children) continue;
+    for (const c of children) {
+      if (!nodeLayers.has(c)) {
+        const newLayer = depth + 1;
+        nodeLayers.set(c, newLayer);
+        downQueue.push([c, depth + 1]);
+      }
+    }
+  }
+
+  const nodes: LineageNode[] = [];
+  for (const [id, layer] of nodeLayers) {
+    const meta = assetMeta[id];
+    nodes.push({
+      id,
+      name: meta ? meta.name : id,
+      type: meta ? meta.type : 'table',
+      layer,
+    });
+  }
+
+  const nodeIdSet = new Set(nodeLayers.keys());
+  const edges = globalEdges.filter(
+    (e) => nodeIdSet.has(e.from) && nodeIdSet.has(e.to),
+  );
+
+  return { centerAssetId, nodes, edges };
+}
+
+export function getLineageData(assetId: string): LineageData {
+  return computeLineage(assetId, 4);
+}
+
+export function getUpstreamIds(assetId: string): string[] {
+  return upstreamMap.get(assetId) ?? [];
+}
+
+export function getDownstreamIds(assetId: string): string[] {
+  return downstreamMap.get(assetId) ?? [];
+}
