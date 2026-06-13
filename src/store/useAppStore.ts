@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import type { AssetType, Application, SubmitAppData } from '@/types';
 import { assets as initialAssets } from '@/data/assets';
 import { initialApplications } from '@/data/applications';
+import { departments } from '@/data/departments';
 import type { DataAsset } from '@/types';
+import type { Department } from '@/types';
 
 interface AppStore {
   searchKeyword: string;
@@ -47,13 +49,45 @@ const saveFavorites = (ids: string[]) => {
   }
 };
 
+const loadApplications = (): Application[] => {
+  try {
+    const stored = localStorage.getItem('data-asset-applications');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return initialApplications;
+};
+
+const saveApplications = (apps: Application[]) => {
+  try {
+    localStorage.setItem('data-asset-applications', JSON.stringify(apps));
+  } catch {
+    // ignore
+  }
+};
+
+const getDepartmentAndChildrenIds = (deptId: string, allDepts: Department[]): string[] => {
+  const ids: string[] = [deptId];
+  const children = allDepts.filter((d) => d.parentId === deptId);
+  children.forEach((child) => {
+    ids.push(...getDepartmentAndChildrenIds(child.id, allDepts));
+  });
+  return ids;
+};
+
 export const useAppStore = create<AppStore>((set, get) => ({
   searchKeyword: '',
   selectedDepartmentId: null,
   selectedSubjectId: null,
   selectedAssetType: null,
   favoriteIds: loadFavorites(),
-  applications: initialApplications,
+  applications: loadApplications(),
   assets: initialAssets.map((a) => ({
     ...a,
     isFavorite: loadFavorites().includes(a.id),
@@ -89,8 +123,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       submitTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
       status: 'pending',
     };
+    const newApps = [newApp, ...get().applications];
+    saveApplications(newApps);
     set({
-      applications: [newApp, ...get().applications],
+      applications: newApps,
       showApplyModal: false,
       applyModalAssetId: null,
     });
@@ -105,43 +141,47 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ showApplyModal: show, applyModalAssetId: assetId || null }),
 
   approveApplication: (id: string, comment: string) => {
-    set({
-      applications: get().applications.map((app) =>
-        app.id === id
-          ? {
-              ...app,
-              status: 'approved',
-              approverId: 'current-owner',
-              approverName: '当前负责人',
-              approvalTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
-              approvalComment: comment || '申请通过。',
-            }
-          : app
-      ),
-    });
+    const newApps = get().applications.map((app) =>
+      app.id === id
+        ? {
+            ...app,
+            status: 'approved' as const,
+            approverId: 'current-owner',
+            approverName: '当前负责人',
+            approvalTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
+            approvalComment: comment || '申请通过。',
+          }
+        : app
+    );
+    saveApplications(newApps);
+    set({ applications: newApps });
   },
 
   rejectApplication: (id: string, comment: string) => {
-    set({
-      applications: get().applications.map((app) =>
-        app.id === id
-          ? {
-              ...app,
-              status: 'rejected',
-              approverId: 'current-owner',
-              approverName: '当前负责人',
-              approvalTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
-              approvalComment: comment || '申请被驳回。',
-            }
-          : app
-      ),
-    });
+    const newApps = get().applications.map((app) =>
+      app.id === id
+        ? {
+            ...app,
+            status: 'rejected' as const,
+            approverId: 'current-owner',
+            approverName: '当前负责人',
+            approvalTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
+            approvalComment: comment || '申请被驳回。',
+          }
+        : app
+    );
+    saveApplications(newApps);
+    set({ applications: newApps });
   },
 
   getAssetById: (id: string) => get().assets.find((a) => a.id === id),
 
   filteredAssets: () => {
     const { assets, searchKeyword, selectedDepartmentId, selectedSubjectId, selectedAssetType } = get();
+    let allowedDeptIds: Set<string> | null = null;
+    if (selectedDepartmentId) {
+      allowedDeptIds = new Set(getDepartmentAndChildrenIds(selectedDepartmentId, departments));
+    }
     return assets.filter((asset) => {
       if (searchKeyword) {
         const kw = searchKeyword.toLowerCase();
@@ -153,11 +193,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
           return false;
         }
       }
-      if (selectedDepartmentId) {
-        const deptPrefix = selectedDepartmentId;
-        if (!asset.departmentId.startsWith(deptPrefix.split('-').slice(0, 2).join('-')) && asset.departmentId !== selectedDepartmentId) {
-          return false;
-        }
+      if (allowedDeptIds && !allowedDeptIds.has(asset.departmentId)) {
+        return false;
       }
       if (selectedSubjectId && asset.subjectId !== selectedSubjectId) {
         return false;
