@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import StatusBadge from '@/components/StatusBadge';
 import ApplyModal from '@/components/ApplyModal';
-import type { ApplicationStatus, Application } from '@/types';
+import type { ApplicationStatus, Application, TimelineEvent } from '@/types';
 import {
   FileText,
   Plus,
@@ -20,6 +20,8 @@ import {
   Search,
   ArrowUpRight,
   X as XIcon,
+  RotateCcw,
+  MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -46,45 +48,89 @@ function getTimeRangeMs(range: TimeRange): number | null {
   return days * 24 * 60 * 60 * 1000;
 }
 
-function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (t: string) => string }) {
-  const isApproved = app.status === 'approved';
-  const isRejected = app.status === 'rejected';
-  const isPending = app.status === 'pending';
+const timelineIconConfig: Record<TimelineEvent['type'], { dotClass: string; iconEl: React.ReactNode; label: string }> = {
+  submit: {
+    dotClass: 'bg-blue-500/20 border-2 border-blue-400',
+    iconEl: <ArrowUpRight className="w-3 h-3 text-blue-400" />,
+    label: '提交申请',
+  },
+  approve: {
+    dotClass: 'bg-emerald-500/20 border-2 border-emerald-400',
+    iconEl: <Check className="w-3 h-3 text-emerald-400" />,
+    label: '审批通过',
+  },
+  reject: {
+    dotClass: 'bg-rose-500/20 border-2 border-rose-400',
+    iconEl: <X className="w-3 h-3 text-rose-400" />,
+    label: '审批驳回',
+  },
+  resubmit: {
+    dotClass: 'bg-orange-500/20 border-2 border-orange-400',
+    iconEl: <RotateCcw className="w-3 h-3 text-orange-400" />,
+    label: '补充材料重新提交',
+  },
+  comment: {
+    dotClass: 'bg-slate-500/20 border-2 border-slate-400',
+    iconEl: <MessageCircle className="w-3 h-3 text-slate-400" />,
+    label: '添加意见',
+  },
+};
 
-  const purposeSummary = app.purpose.length > 40 ? app.purpose.slice(0, 40) + '...' : app.purpose;
+function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (t: string) => string }) {
+  const isWaiting = app.status === 'pending' || app.status === 'resubmitted';
 
   return (
     <div className="relative pl-8">
       <div className="absolute left-[11px] top-2 bottom-2 w-px bg-white/[0.08]" />
 
-      <div className="relative pb-6">
-        <div
-          className={cn(
-            'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
-            'bg-blue-500/20 border-2 border-blue-400'
-          )}
-        >
-          <ArrowUpRight className="w-3 h-3 text-blue-400" />
-        </div>
-        <div className="ml-2">
-          <div className="text-sm font-medium text-blue-300 mb-1">提交申请</div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-            <span className="flex items-center gap-1">
-              <User className="w-3 h-3 text-cyan-400" />
-              {app.applicantName}
-            </span>
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-violet-400" />
-              {formatDate(app.submitTime)}
-            </span>
-          </div>
-          <div className="mt-1.5 text-xs text-slate-500 bg-white/[0.02] rounded-lg px-3 py-2 border border-white/[0.04]">
-            {purposeSummary}
-          </div>
-        </div>
-      </div>
+      {app.timeline.map((event, idx) => {
+        const cfg = timelineIconConfig[event.type];
+        const isLast = idx === app.timeline.length - 1;
+        const textColor =
+          event.type === 'submit' ? 'text-blue-300' :
+          event.type === 'approve' ? 'text-emerald-300' :
+          event.type === 'reject' ? 'text-rose-300' :
+          event.type === 'resubmit' ? 'text-orange-300' :
+          'text-slate-300';
+        const commentBg =
+          event.type === 'approve' ? 'bg-emerald-500/5 border-emerald-500/20' :
+          event.type === 'reject' ? 'bg-rose-500/5 border-rose-500/20' :
+          event.type === 'resubmit' ? 'bg-orange-500/5 border-orange-500/20' :
+          'bg-white/[0.02] border-white/[0.04]';
 
-      {isPending ? (
+        return (
+          <div key={idx} className={cn('relative', isLast && !isWaiting ? 'pb-0' : 'pb-6')}>
+            <div
+              className={cn(
+                'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
+                cfg.dotClass
+              )}
+            >
+              {cfg.iconEl}
+            </div>
+            <div className="ml-2">
+              <div className={cn('text-sm font-medium mb-1', textColor)}>{cfg.label}</div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                <span className="flex items-center gap-1">
+                  <User className="w-3 h-3 text-cyan-400" />
+                  {event.actorName}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-violet-400" />
+                  {formatDate(event.time)}
+                </span>
+              </div>
+              {event.comment && (
+                <div className={cn('mt-1.5 text-xs rounded-lg px-3 py-2 border text-slate-300', commentBg)}>
+                  {event.comment}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {isWaiting && (
         <div className="relative">
           <div
             className={cn(
@@ -104,55 +150,6 @@ function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (
             </div>
           </div>
         </div>
-      ) : (
-        <div className="relative">
-          <div
-            className={cn(
-              'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
-              isApproved && 'bg-emerald-500/20 border-2 border-emerald-400',
-              isRejected && 'bg-rose-500/20 border-2 border-rose-400'
-            )}
-          >
-            {isApproved && <Check className="w-3 h-3 text-emerald-400" />}
-            {isRejected && <X className="w-3 h-3 text-rose-400" />}
-          </div>
-          <div className="ml-2">
-            <div
-              className={cn(
-                'text-sm font-medium mb-1',
-                isApproved ? 'text-emerald-300' : 'text-rose-300'
-              )}
-            >
-              {isApproved ? '审批通过' : '审批驳回'}
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-              {app.approverName && (
-                <span className="flex items-center gap-1">
-                  <User className="w-3 h-3 text-cyan-400" />
-                  {app.approverName}
-                </span>
-              )}
-              {app.approvalTime && (
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-violet-400" />
-                  {formatDate(app.approvalTime)}
-                </span>
-              )}
-            </div>
-            {app.approvalComment && (
-              <div
-                className={cn(
-                  'mt-1.5 text-xs rounded-lg px-3 py-2 border',
-                  isApproved
-                    ? 'bg-emerald-500/5 border-emerald-500/20 text-slate-300'
-                    : 'bg-rose-500/5 border-rose-500/20 text-slate-300'
-                )}
-              >
-                {app.approvalComment}
-              </div>
-            )}
-          </div>
-        </div>
       )}
     </div>
   );
@@ -165,11 +162,20 @@ interface FilterTag {
 }
 
 export default function Applications() {
-  const { applications, submitApplication, setShowApplyModal, approveApplication, rejectApplication } = useAppStore();
+  const {
+    applications,
+    submitApplication,
+    setShowApplyModal,
+    approveApplication,
+    rejectApplication,
+    addApprovalComment,
+    resubmitApplication,
+  } = useAppStore();
   const [filter, setFilter] = useState<'all' | ApplicationStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [replyComment, setReplyComment] = useState('');
-  const [replyId, setReplyId] = useState<string | null>(null);
+  const [commentInput, setCommentInput] = useState('');
+  const [resubmitId, setResubmitId] = useState<string | null>(null);
+  const [resubmitInput, setResubmitInput] = useState('');
 
   const [applicantSearch, setApplicantSearch] = useState('');
   const [assetSearch, setAssetSearch] = useState('');
@@ -180,7 +186,13 @@ export default function Applications() {
     const rangeMs = getTimeRangeMs(timeRange);
 
     return applications.filter((a) => {
-      if (filter !== 'all' && a.status !== filter) return false;
+      if (filter !== 'all') {
+        if (filter === 'pending') {
+          if (a.status !== 'pending' && a.status !== 'resubmitted') return false;
+        } else {
+          if (a.status !== filter) return false;
+        }
+      }
 
       if (applicantSearch.trim()) {
         const kw = applicantSearch.trim().toLowerCase();
@@ -203,7 +215,7 @@ export default function Applications() {
 
   const counts = useMemo(() => ({
     all: applications.length,
-    pending: applications.filter((a) => a.status === 'pending').length,
+    pending: applications.filter((a) => a.status === 'pending' || a.status === 'resubmitted').length,
     approved: applications.filter((a) => a.status === 'approved').length,
     rejected: applications.filter((a) => a.status === 'rejected').length,
   }), [applications]);
@@ -244,30 +256,37 @@ export default function Applications() {
     setFilter('all');
   };
 
-  const handleApprove = (app: Application) => {
-    if (replyId === app.id && replyComment.trim()) {
-      approveApplication(app.id, replyComment.trim());
-      setReplyId(null);
-      setReplyComment('');
-    } else {
-      setReplyId(app.id);
-    }
+  const handleAddComment = (appId: string) => {
+    if (!commentInput.trim()) return;
+    addApprovalComment(appId, commentInput.trim());
+    setCommentInput('');
   };
 
-  const handleReject = (app: Application) => {
-    if (replyId === app.id && replyComment.trim()) {
-      rejectApplication(app.id, replyComment.trim());
-      setReplyId(null);
-      setReplyComment('');
-    } else {
-      setReplyId(app.id);
-    }
+  const handleResubmit = (appId: string) => {
+    if (!resubmitInput.trim()) return;
+    resubmitApplication(appId, resubmitInput.trim());
+    setResubmitId(null);
+    setResubmitInput('');
   };
 
   const formatDate = (time: string) => {
     const [date, hm] = time.split(' ');
     const hhmm = hm.slice(0, 5);
     return `${date} ${hhmm}`;
+  };
+
+  const statusIconColor = (status: ApplicationStatus) => {
+    if (status === 'approved') return 'bg-emerald-500/15';
+    if (status === 'pending') return 'bg-amber-500/15';
+    if (status === 'rejected') return 'bg-rose-500/15';
+    return 'bg-orange-500/15';
+  };
+
+  const statusTextColor = (status: ApplicationStatus) => {
+    if (status === 'approved') return 'text-emerald-400';
+    if (status === 'pending') return 'text-amber-400';
+    if (status === 'rejected') return 'text-rose-400';
+    return 'text-orange-400';
   };
 
   return (
@@ -400,7 +419,7 @@ export default function Applications() {
           filtered.map((app, idx) => {
             const isExpanded = expandedId === app.id;
             const staggerClass = `stagger-${(idx % 6) + 1}`;
-            const isReplying = replyId === app.id;
+            const canApprove = app.status === 'pending' || app.status === 'resubmitted';
             return (
               <div
                 key={app.id}
@@ -415,22 +434,8 @@ export default function Applications() {
                 >
                   <div className="flex flex-wrap items-start gap-4">
                     <div className="relative flex-shrink-0">
-                      <div
-                        className={cn(
-                          'w-12 h-12 rounded-2xl flex items-center justify-center',
-                          app.status === 'approved' && 'bg-emerald-500/15',
-                          app.status === 'pending' && 'bg-amber-500/15',
-                          app.status === 'rejected' && 'bg-rose-500/15'
-                        )}
-                      >
-                        <FileText
-                          className={cn(
-                            'w-6 h-6',
-                            app.status === 'approved' && 'text-emerald-400',
-                            app.status === 'pending' && 'text-amber-400',
-                            app.status === 'rejected' && 'text-rose-400'
-                          )}
-                        />
+                      <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center', statusIconColor(app.status))}>
+                        <FileText className={cn('w-6 h-6', statusTextColor(app.status))} />
                       </div>
                     </div>
 
@@ -516,76 +521,88 @@ export default function Applications() {
                       </div>
                     </div>
 
-                    {app.status === 'pending' && (
+                    {canApprove && (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 pt-2 border-t border-white/[0.06]">
                           <span className="text-xs text-slate-500">审批操作：</span>
                           <button
-                            onClick={() => handleApprove(app)}
-                            className={cn(
-                              'text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5',
-                              isReplying
-                                ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
-                                : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15'
-                            )}
+                            onClick={() => approveApplication(app.id)}
+                            className="text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15"
                           >
                             <CheckCircle className="w-3.5 h-3.5" />
-                            {isReplying ? '确认通过' : '通过申请'}
+                            通过
                           </button>
                           <button
-                            onClick={() => handleReject(app)}
-                            className={cn(
-                              'text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5',
-                              isReplying
-                                ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300'
-                                : 'bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/15'
-                            )}
+                            onClick={() => rejectApplication(app.id)}
+                            className="text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/15"
                           >
                             <XCircle className="w-3.5 h-3.5" />
-                            {isReplying ? '确认驳回' : '驳回申请'}
+                            驳回
                           </button>
-                          {isReplying && (
-                            <button
-                              onClick={() => {
-                                setReplyId(null);
-                                setReplyComment('');
-                              }}
-                              className="text-xs px-4 py-2 rounded-xl font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
-                            >
-                              取消
-                            </button>
-                          )}
                         </div>
 
-                        {isReplying && (
-                          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] fade-in-up">
-                            <div className="text-xs text-slate-500 mb-2">请填写审批意见：</div>
+                        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08]">
+                          <div className="text-xs text-slate-500 mb-2">添加审批意见：</div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={expandedId === app.id ? commentInput : ''}
+                              onChange={(e) => setCommentInput(e.target.value)}
+                              placeholder="输入审批意见..."
+                              className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500/40 transition-all"
+                            />
+                            <button
+                              onClick={() => handleAddComment(app.id)}
+                              className="px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.1] text-sm text-slate-300 hover:bg-white/[0.1] transition-all flex items-center gap-1.5"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              添加意见
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {app.status === 'rejected' && (
+                      <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                        {resubmitId === app.id ? (
+                          <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/20 fade-in-up">
+                            <div className="text-xs text-orange-300 mb-2">补充材料并重新提交：</div>
                             <div className="flex gap-2">
                               <input
                                 type="text"
-                                value={replyComment}
-                                onChange={(e) => setReplyComment(e.target.value)}
-                                placeholder="输入审批意见..."
-                                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500/40 transition-all"
+                                value={resubmitInput}
+                                onChange={(e) => setResubmitInput(e.target.value)}
+                                placeholder="请输入补充说明..."
+                                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-orange-500/40 transition-all"
                                 autoFocus
                               />
                               <button
-                                onClick={() => {
-                                  if (replyComment.trim()) {
-                                    if (replyComment.includes('驳回') || replyComment.includes('不同意') || replyComment.includes('拒绝')) {
-                                      handleReject(app);
-                                    } else {
-                                      handleApprove(app);
-                                    }
-                                  }
-                                }}
-                                className="px-4 py-2.5 rounded-xl btn-primary text-sm flex items-center gap-1.5"
+                                onClick={() => handleResubmit(app.id)}
+                                className="px-4 py-2.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-sm text-orange-300 hover:bg-orange-500/25 transition-all flex items-center gap-1.5"
                               >
                                 <Send className="w-3.5 h-3.5" />
                                 提交
                               </button>
+                              <button
+                                onClick={() => {
+                                  setResubmitId(null);
+                                  setResubmitInput('');
+                                }}
+                                className="text-xs px-4 py-2.5 rounded-xl font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                              >
+                                取消
+                              </button>
                             </div>
                           </div>
+                        ) : (
+                          <button
+                            onClick={() => setResubmitId(app.id)}
+                            className="text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/30 text-orange-300 hover:bg-orange-500/15"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            补充材料并重新提交
+                          </button>
                         )}
                       </div>
                     )}

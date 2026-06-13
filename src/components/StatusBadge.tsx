@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { ApplicationStatus } from '@/types';
-import { Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
 
 const config: Record<ApplicationStatus, { label: string; className: string; icon: typeof Clock }> = {
   pending: {
@@ -17,6 +17,11 @@ const config: Record<ApplicationStatus, { label: string; className: string; icon
     label: '已驳回',
     className: 'bg-rose-500/10 text-rose-300 border border-rose-500/30',
     icon: XCircle,
+  },
+  resubmitted: {
+    label: '已重新提交',
+    className: 'bg-orange-500/10 text-orange-300 border border-orange-500/30',
+    icon: RotateCcw,
   },
 };
 

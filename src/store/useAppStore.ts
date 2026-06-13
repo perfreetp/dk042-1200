@@ -26,8 +26,10 @@ interface AppStore {
   setSelectedSubject: (id: string | null) => void;
   setSelectedAssetType: (type: AssetType | null) => void;
   setShowApplyModal: (show: boolean, assetId?: string) => void;
-  approveApplication: (id: string, comment: string) => void;
-  rejectApplication: (id: string, comment: string) => void;
+  approveApplication: (id: string) => void;
+  rejectApplication: (id: string) => void;
+  addApprovalComment: (id: string, comment: string) => void;
+  resubmitApplication: (id: string, supplement: string) => void;
   getAssetById: (id: string) => DataAsset | undefined;
   filteredAssets: () => DataAsset[];
 
@@ -120,16 +122,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
   isFavorite: (id: string) => get().favoriteIds.includes(id),
 
   submitApplication: (data: SubmitAppData) => {
+    const submitTime = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+    const applicantName = '当前用户';
     const newApp: Application = {
       id: `app-${Date.now()}`,
       assetId: data.assetId,
       assetName: data.assetName,
       applicantId: 'current-user',
-      applicantName: '当前用户',
+      applicantName,
       purpose: data.purpose,
       duration: data.duration,
-      submitTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
+      submitTime,
       status: 'pending',
+      timeline: [{ type: 'submit', time: submitTime, actorName: applicantName, comment: data.purpose }],
     };
     const newApps = [newApp, ...get().applications];
     saveApplications(newApps);
@@ -148,16 +153,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setShowApplyModal: (show: boolean, assetId?: string) =>
     set({ showApplyModal: show, applyModalAssetId: assetId || null }),
 
-  approveApplication: (id: string, comment: string) => {
+  approveApplication: (id: string) => {
+    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+    const approverName = '当前负责人';
     const newApps = get().applications.map((app) =>
       app.id === id
         ? {
             ...app,
             status: 'approved' as const,
             approverId: 'current-owner',
-            approverName: '当前负责人',
-            approvalTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
-            approvalComment: comment || '申请通过。',
+            approverName,
+            approvalTime: now,
+            timeline: [...app.timeline, { type: 'approve' as const, time: now, actorName: approverName }],
           }
         : app
     );
@@ -165,16 +172,52 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ applications: newApps });
   },
 
-  rejectApplication: (id: string, comment: string) => {
+  rejectApplication: (id: string) => {
+    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+    const approverName = '当前负责人';
     const newApps = get().applications.map((app) =>
       app.id === id
         ? {
             ...app,
             status: 'rejected' as const,
             approverId: 'current-owner',
-            approverName: '当前负责人',
-            approvalTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
-            approvalComment: comment || '申请被驳回。',
+            approverName,
+            approvalTime: now,
+            timeline: [...app.timeline, { type: 'reject' as const, time: now, actorName: approverName }],
+          }
+        : app
+    );
+    saveApplications(newApps);
+    set({ applications: newApps });
+  },
+
+  addApprovalComment: (id: string, comment: string) => {
+    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+    const actorName = '当前负责人';
+    const newApps = get().applications.map((app) =>
+      app.id === id
+        ? {
+            ...app,
+            timeline: [...app.timeline, { type: 'comment' as const, time: now, actorName, comment }],
+          }
+        : app
+    );
+    saveApplications(newApps);
+    set({ applications: newApps });
+  },
+
+  resubmitApplication: (id: string, supplement: string) => {
+    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+    const applicantName = '当前用户';
+    const newApps = get().applications.map((app) =>
+      app.id === id
+        ? {
+            ...app,
+            status: 'resubmitted' as const,
+            approverId: undefined,
+            approverName: undefined,
+            approvalTime: undefined,
+            timeline: [...app.timeline, { type: 'resubmit' as const, time: now, actorName: applicantName, comment: supplement }],
           }
         : app
     );

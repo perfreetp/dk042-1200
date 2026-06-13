@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useMemo, useState, useRef } from 'react';
-import { getLineageData, getUpstreamIds, getDownstreamIds } from '@/data/lineage';
+import { useMemo, useState, useRef, useEffect } from 'react';
+import { getLineageData, getUpstreamIds, getDownstreamIds, assetMeta } from '@/data/lineage';
 import { useAppStore } from '@/store/useAppStore';
 import SensitivityBadge from '@/components/SensitivityBadge';
 import AssetTypeBadge, { typeConfig } from '@/components/AssetTypeBadge';
@@ -18,6 +18,7 @@ import {
   X,
   ArrowRight,
   GitBranch,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LineageNode } from '@/types';
@@ -38,9 +39,30 @@ export default function LineageView() {
   const [direction, setDirection] = useState<'both' | 'upstream' | 'downstream'>('both');
   const [selectedNode, setSelectedNode] = useState<LineageNode | null>(null);
   const [viewBox, setViewBox] = useState({ x: -400, y: -200, w: 1600, h: 600 });
+  const historyRef = useRef<string[]>(id ? [id] : []);
+  const [history, setHistory] = useState<string[]>(id ? [id] : []);
 
   const lineageData = useMemo(() => (id ? getLineageData(id) : null), [id]);
   const centerAsset = id ? getAssetById(id) : undefined;
+
+  useEffect(() => {
+    if (!id) return;
+    const h = historyRef.current;
+    const idx = h.indexOf(id);
+    if (idx !== -1) {
+      historyRef.current = h.slice(0, idx + 1);
+    } else {
+      historyRef.current = [...h, id];
+    }
+    setHistory([...historyRef.current]);
+    const meta = assetMeta[id];
+    setSelectedNode({
+      id,
+      name: meta ? meta.name : id,
+      type: meta ? meta.type : 'table',
+      layer: 0,
+    });
+  }, [id]);
 
   const layout = useMemo(() => {
     if (!lineageData) return { nodes: [], edges: [] };
@@ -150,6 +172,33 @@ export default function LineageView() {
             </div>
 
             <div className="w-px h-5 bg-white/10 mx-1 hidden sm:block" />
+
+            {history.length > 1 && (
+              <div className="flex items-center gap-1 overflow-x-auto max-w-[300px] scrollbar-none">
+                <History className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                {history.map((hid, idx) => {
+                  const meta = assetMeta[hid];
+                  const name = meta ? meta.name : hid;
+                  const isCurrent = idx === history.length - 1;
+                  return (
+                    <div key={hid} className="flex items-center gap-1 shrink-0">
+                      {idx > 0 && <ChevronRight className="w-3 h-3 text-slate-600" />}
+                      <button
+                        onClick={() => navigate(`/lineage/${hid}`)}
+                        className={cn(
+                          'text-xs px-1.5 py-0.5 rounded-md transition-all whitespace-nowrap',
+                          isCurrent
+                            ? 'text-cyan-300 bg-cyan-500/10 font-medium'
+                            : 'text-slate-500 hover:text-slate-200 hover:bg-white/[0.04]'
+                        )}
+                      >
+                        {name.length > 16 ? name.slice(0, 16) + '…' : name}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08]">
               <button
@@ -477,10 +526,7 @@ export default function LineageView() {
                                 </div>
                               </div>
                               <button
-                                onClick={() => {
-                                  setSelectedNode(null);
-                                  navigate(`/lineage/${uid}`);
-                                }}
+                                onClick={() => navigate(`/lineage/${uid}`)}
                                 className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center
                                            text-slate-600 hover:text-violet-300 hover:bg-violet-500/10 transition-all
                                            opacity-0 group-hover:opacity-100"
@@ -537,10 +583,7 @@ export default function LineageView() {
                                 </div>
                               </div>
                               <button
-                                onClick={() => {
-                                  setSelectedNode(null);
-                                  navigate(`/lineage/${did}`);
-                                }}
+                                onClick={() => navigate(`/lineage/${did}`)}
                                 className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center
                                            text-slate-600 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all
                                            opacity-0 group-hover:opacity-100"
@@ -570,10 +613,7 @@ export default function LineageView() {
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <button
-                onClick={() => {
-                  setSelectedNode(null);
-                  navigate(`/lineage/${selectedNode.id}`);
-                }}
+                onClick={() => navigate(`/lineage/${selectedNode.id}`)}
                 className="btn-ghost text-xs w-full py-2.5 !bg-violet-500/10 !border-violet-500/30 !text-violet-300 flex items-center justify-center gap-1.5"
               >
                 <GitBranch className="w-3.5 h-3.5" />
