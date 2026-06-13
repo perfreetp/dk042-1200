@@ -15,10 +15,11 @@ export const initialApplications: Application[] = [
     approverName: '张明',
     approvalTime: '2026-06-12 14:20:00',
     approvalComment: '用途合理，同意申请。请按照数据安全规范使用，到期后请及时续期。',
+    submissionCount: 1,
     timeline: [
-      { type: 'submit', time: '2026-06-12 09:30:00', actorName: '周涛', comment: '用于用户流失预警模型训练，需要提取用户注册信息及实名认证状态' },
-      { type: 'comment', time: '2026-06-12 11:00:00', actorName: '张明', comment: '用途合理，同意申请。请按照数据安全规范使用，到期后请及时续期。' },
-      { type: 'approve', time: '2026-06-12 14:20:00', actorName: '张明' },
+      { type: 'submit', time: '2026-06-12 09:30:00', actorName: '周涛', comment: '用于用户流失预警模型训练，需要提取用户注册信息及实名认证状态', role: 'applicant', submissionNumber: 1 },
+      { type: 'comment', time: '2026-06-12 11:00:00', actorName: '张明', comment: '用途合理，同意申请。请按照数据安全规范使用，到期后请及时续期。', role: 'approver' },
+      { type: 'approve', time: '2026-06-12 14:20:00', actorName: '张明', role: 'approver' },
     ],
   },
   {
@@ -30,9 +31,12 @@ export const initialApplications: Application[] = [
     purpose: '推荐系统实时调用用户画像接口，用于个性化商品推荐策略',
     duration: '90天',
     submitTime: '2026-06-13 10:15:00',
-    status: 'pending',
+    status: 'transferred',
+    currentHandlerName: '李华',
+    submissionCount: 1,
     timeline: [
-      { type: 'submit', time: '2026-06-13 10:15:00', actorName: '吴磊', comment: '推荐系统实时调用用户画像接口，用于个性化商品推荐策略' },
+      { type: 'submit', time: '2026-06-13 10:15:00', actorName: '吴磊', comment: '推荐系统实时调用用户画像接口，用于个性化商品推荐策略', role: 'applicant', submissionNumber: 1 },
+      { type: 'transfer', time: '2026-06-13 14:30:00', actorName: '张明', comment: '该接口涉及用户画像数据，建议由数据安全组李华负责审批', transferTo: '李华', role: 'approver' },
     ],
   },
   {
@@ -49,10 +53,11 @@ export const initialApplications: Application[] = [
     approverName: '赵雨',
     approvalTime: '2026-06-11 16:30:00',
     approvalComment: '申请期限过长，请重新申请并明确具体使用期限，建议不超过180天。',
+    submissionCount: 1,
     timeline: [
-      { type: 'submit', time: '2026-06-10 11:00:00', actorName: '孙婷', comment: '财务月度对账报表开发，需要支付流水数据分析' },
-      { type: 'comment', time: '2026-06-11 14:00:00', actorName: '赵雨', comment: '申请期限过长，请重新申请并明确具体使用期限，建议不超过180天。' },
-      { type: 'reject', time: '2026-06-11 16:30:00', actorName: '赵雨' },
+      { type: 'submit', time: '2026-06-10 11:00:00', actorName: '孙婷', comment: '财务月度对账报表开发，需要支付流水数据分析', role: 'applicant', submissionNumber: 1 },
+      { type: 'comment', time: '2026-06-11 14:00:00', actorName: '赵雨', comment: '申请期限过长，请重新申请并明确具体使用期限，建议不超过180天。', role: 'approver' },
+      { type: 'reject', time: '2026-06-11 16:30:00', actorName: '赵雨', role: 'approver' },
     ],
   },
   {
@@ -65,8 +70,9 @@ export const initialApplications: Application[] = [
     duration: '7天',
     submitTime: '2026-06-14 08:45:00',
     status: 'pending',
+    submissionCount: 1,
     timeline: [
-      { type: 'submit', time: '2026-06-14 08:45:00', actorName: '郑浩', comment: '季度经营分析报告撰写，需要查看各品类月度销售趋势数据' },
+      { type: 'submit', time: '2026-06-14 08:45:00', actorName: '郑浩', comment: '季度经营分析报告撰写，需要查看各品类月度销售趋势数据', role: 'applicant', submissionNumber: 1 },
     ],
   },
   {
@@ -83,10 +89,11 @@ export const initialApplications: Application[] = [
     approverName: '张明',
     approvalTime: '2026-06-10 09:50:00',
     approvalComment: '同意。注意使用过程中不得导出含手机号、身份证等敏感字段。',
+    submissionCount: 1,
     timeline: [
-      { type: 'submit', time: '2026-06-09 15:20:00', actorName: '黄丽', comment: '会员等级体系分析，基于用户历史订单数据构建用户分层模型' },
-      { type: 'comment', time: '2026-06-10 09:30:00', actorName: '张明', comment: '同意。注意使用过程中不得导出含手机号、身份证等敏感字段。' },
-      { type: 'approve', time: '2026-06-10 09:50:00', actorName: '张明' },
+      { type: 'submit', time: '2026-06-09 15:20:00', actorName: '黄丽', comment: '会员等级体系分析，基于用户历史订单数据构建用户分层模型', role: 'applicant', submissionNumber: 1 },
+      { type: 'comment', time: '2026-06-10 09:30:00', actorName: '张明', comment: '同意。注意使用过程中不得导出含手机号、身份证等敏感字段。', role: 'approver' },
+      { type: 'approve', time: '2026-06-10 09:50:00', actorName: '张明', role: 'approver' },
     ],
   },
   {
@@ -98,9 +105,13 @@ export const initialApplications: Application[] = [
     purpose: '人力成本核算分析项目',
     duration: '30天',
     submitTime: '2026-06-11 13:10:00',
-    status: 'pending',
+    status: 'resubmitted',
+    submissionCount: 2,
     timeline: [
-      { type: 'submit', time: '2026-06-11 13:10:00', actorName: '林峰', comment: '人力成本核算分析项目' },
+      { type: 'submit', time: '2026-06-11 13:10:00', actorName: '林峰', comment: '人力成本核算分析项目', role: 'applicant', submissionNumber: 1 },
+      { type: 'comment', time: '2026-06-12 10:00:00', actorName: '王芳', comment: '请补充具体的分析维度和输出形式说明', role: 'approver' },
+      { type: 'reject', time: '2026-06-12 15:00:00', actorName: '王芳', role: 'approver' },
+      { type: 'resubmit', time: '2026-06-13 09:00:00', actorName: '林峰', comment: '补充说明：分析维度包括部门、岗位、职级；输出形式为月度人力成本报表和同比环比分析', role: 'applicant', submissionNumber: 2 },
     ],
   },
 ];

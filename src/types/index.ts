@@ -68,13 +68,16 @@ export interface LineageData {
   edges: LineageEdge[];
 }
 
-export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'resubmitted';
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'resubmitted' | 'transferred';
 
 export interface TimelineEvent {
-  type: 'submit' | 'approve' | 'reject' | 'resubmit' | 'comment';
+  type: 'submit' | 'approve' | 'reject' | 'resubmit' | 'comment' | 'transfer';
   time: string;
   actorName: string;
   comment?: string;
+  role?: 'applicant' | 'approver' | 'system';
+  transferTo?: string;
+  submissionNumber?: number;
 }
 
 export interface Application {
@@ -91,6 +94,8 @@ export interface Application {
   approverName?: string;
   approvalTime?: string;
   approvalComment?: string;
+  currentHandlerName?: string;
+  submissionCount: number;
   timeline: TimelineEvent[];
 }
 

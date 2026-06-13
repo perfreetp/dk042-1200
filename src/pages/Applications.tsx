@@ -22,6 +22,8 @@ import {
   X as XIcon,
   RotateCcw,
   MessageCircle,
+  Forward,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -47,6 +49,31 @@ function getTimeRangeMs(range: TimeRange): number | null {
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
   return days * 24 * 60 * 60 * 1000;
 }
+
+const getRoleConfig = (role?: TimelineEvent['role']) => {
+  if (role === 'applicant') {
+    return {
+      label: '申请人说明',
+      tagClass: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+      bubbleClass: 'bg-blue-500/5 border-blue-500/20',
+      textClass: 'text-blue-300',
+    };
+  }
+  if (role === 'approver') {
+    return {
+      label: '审批人意见',
+      tagClass: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
+      bubbleClass: 'bg-violet-500/5 border-violet-500/20',
+      textClass: 'text-violet-300',
+    };
+  }
+  return {
+    label: '系统消息',
+    tagClass: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
+    bubbleClass: 'bg-white/[0.02] border-white/[0.04]',
+    textClass: 'text-slate-300',
+  };
+};
 
 const timelineIconConfig: Record<TimelineEvent['type'], { dotClass: string; iconEl: React.ReactNode; label: string }> = {
   submit: {
@@ -74,10 +101,15 @@ const timelineIconConfig: Record<TimelineEvent['type'], { dotClass: string; icon
     iconEl: <MessageCircle className="w-3 h-3 text-slate-400" />,
     label: '添加意见',
   },
+  transfer: {
+    dotClass: 'bg-sky-500/20 border-2 border-sky-400',
+    iconEl: <Forward className="w-3 h-3 text-sky-400" />,
+    label: '转派审批',
+  },
 };
 
 function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (t: string) => string }) {
-  const isWaiting = app.status === 'pending' || app.status === 'resubmitted';
+  const isWaiting = app.status === 'pending' || app.status === 'resubmitted' || app.status === 'transferred';
 
   return (
     <div className="relative pl-8">
@@ -86,17 +118,26 @@ function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (
       {app.timeline.map((event, idx) => {
         const cfg = timelineIconConfig[event.type];
         const isLast = idx === app.timeline.length - 1;
+        const roleCfg = getRoleConfig(event.role);
         const textColor =
           event.type === 'submit' ? 'text-blue-300' :
           event.type === 'approve' ? 'text-emerald-300' :
           event.type === 'reject' ? 'text-rose-300' :
           event.type === 'resubmit' ? 'text-orange-300' :
-          'text-slate-300';
+          event.type === 'transfer' ? 'text-sky-300' :
+          roleCfg.textClass;
         const commentBg =
           event.type === 'approve' ? 'bg-emerald-500/5 border-emerald-500/20' :
           event.type === 'reject' ? 'bg-rose-500/5 border-rose-500/20' :
           event.type === 'resubmit' ? 'bg-orange-500/5 border-orange-500/20' :
+          event.type === 'transfer' ? 'bg-sky-500/5 border-sky-500/20' :
+          event.type === 'comment' ? roleCfg.bubbleClass :
           'bg-white/[0.02] border-white/[0.04]';
+        const showSubmissionBadge =
+          (event.type === 'submit' || event.type === 'resubmit') &&
+          typeof event.submissionNumber === 'number';
+        const showRoleTag = event.type === 'comment';
+        const showTransferInfo = event.type === 'transfer' && event.transferTo;
 
         return (
           <div key={idx} className={cn('relative', isLast && !isWaiting ? 'pb-0' : 'pb-6')}>
@@ -109,7 +150,14 @@ function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (
               {cfg.iconEl}
             </div>
             <div className="ml-2">
-              <div className={cn('text-sm font-medium mb-1', textColor)}>{cfg.label}</div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <div className={cn('text-sm font-medium', textColor)}>{cfg.label}</div>
+                {showSubmissionBadge && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                    第{event.submissionNumber}次
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
                 <span className="flex items-center gap-1">
                   <User className="w-3 h-3 text-cyan-400" />
@@ -119,10 +167,25 @@ function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (
                   <Calendar className="w-3 h-3 text-violet-400" />
                   {formatDate(event.time)}
                 </span>
+                {showTransferInfo && (
+                  <span className="flex items-center gap-1 text-sky-400">
+                    <Forward className="w-3 h-3" />
+                    转派给：{event.transferTo}
+                  </span>
+                )}
               </div>
               {event.comment && (
                 <div className={cn('mt-1.5 text-xs rounded-lg px-3 py-2 border text-slate-300', commentBg)}>
-                  {event.comment}
+                  {showRoleTag ? (
+                    <>
+                      <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold mr-2 mb-1 border', roleCfg.tagClass)}>
+                        {roleCfg.label}
+                      </span>
+                      <span>{event.comment}</span>
+                    </>
+                  ) : (
+                    event.comment
+                  )}
                 </div>
               )}
             </div>
@@ -135,18 +198,34 @@ function ApprovalTimeline({ app, formatDate }: { app: Application; formatDate: (
           <div
             className={cn(
               'absolute left-[-21px] top-1 w-[22px] h-[22px] rounded-full flex items-center justify-center',
-              'bg-amber-500/10 border-2 border-dashed border-amber-400/60'
+              app.status === 'transferred'
+                ? 'bg-sky-500/10 border-2 border-dashed border-sky-400/60'
+                : 'bg-amber-500/10 border-2 border-dashed border-amber-400/60'
             )}
           >
-            <Clock className="w-3 h-3 text-amber-400" />
+            {app.status === 'transferred' ? (
+              <Forward className="w-3 h-3 text-sky-400" />
+            ) : (
+              <Clock className="w-3 h-3 text-amber-400" />
+            )}
           </div>
           <div className="ml-2">
-            <div className="text-sm font-medium text-amber-300 mb-1">等待审批中</div>
+            <div className={cn('text-sm font-medium mb-1', app.status === 'transferred' ? 'text-sky-300' : 'text-amber-300')}>
+              {app.status === 'transferred' ? '等待转派审批中' : '等待审批中'}
+            </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden max-w-[120px]">
-                <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 animate-pulse" />
+                <div className={cn('h-full w-1/2 rounded-full animate-pulse',
+                  app.status === 'transferred'
+                    ? 'bg-gradient-to-r from-sky-400 to-cyan-400'
+                    : 'bg-gradient-to-r from-amber-400 to-orange-400'
+                )} />
               </div>
-              <span>审批进行中...</span>
+              <span>
+                {app.status === 'transferred'
+                  ? `新处理人 ${app.currentHandlerName} 审批中...`
+                  : '审批进行中...'}
+              </span>
             </div>
           </div>
         </div>
@@ -170,12 +249,16 @@ export default function Applications() {
     rejectApplication,
     addApprovalComment,
     resubmitApplication,
+    transferApplication,
   } = useAppStore();
   const [filter, setFilter] = useState<'all' | ApplicationStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [commentInput, setCommentInput] = useState('');
   const [resubmitId, setResubmitId] = useState<string | null>(null);
   const [resubmitInput, setResubmitInput] = useState('');
+  const [transferId, setTransferId] = useState<string | null>(null);
+  const [transferHandler, setTransferHandler] = useState('');
+  const [transferReason, setTransferReason] = useState('');
 
   const [applicantSearch, setApplicantSearch] = useState('');
   const [assetSearch, setAssetSearch] = useState('');
@@ -188,7 +271,7 @@ export default function Applications() {
     return applications.filter((a) => {
       if (filter !== 'all') {
         if (filter === 'pending') {
-          if (a.status !== 'pending' && a.status !== 'resubmitted') return false;
+          if (a.status !== 'pending' && a.status !== 'resubmitted' && a.status !== 'transferred') return false;
         } else {
           if (a.status !== filter) return false;
         }
@@ -215,7 +298,7 @@ export default function Applications() {
 
   const counts = useMemo(() => ({
     all: applications.length,
-    pending: applications.filter((a) => a.status === 'pending' || a.status === 'resubmitted').length,
+    pending: applications.filter((a) => a.status === 'pending' || a.status === 'resubmitted' || a.status === 'transferred').length,
     approved: applications.filter((a) => a.status === 'approved').length,
     rejected: applications.filter((a) => a.status === 'rejected').length,
   }), [applications]);
@@ -269,6 +352,14 @@ export default function Applications() {
     setResubmitInput('');
   };
 
+  const handleTransfer = (appId: string) => {
+    if (!transferHandler.trim() || !transferReason.trim()) return;
+    transferApplication(appId, transferHandler.trim(), transferReason.trim());
+    setTransferId(null);
+    setTransferHandler('');
+    setTransferReason('');
+  };
+
   const formatDate = (time: string) => {
     const [date, hm] = time.split(' ');
     const hhmm = hm.slice(0, 5);
@@ -279,6 +370,7 @@ export default function Applications() {
     if (status === 'approved') return 'bg-emerald-500/15';
     if (status === 'pending') return 'bg-amber-500/15';
     if (status === 'rejected') return 'bg-rose-500/15';
+    if (status === 'transferred') return 'bg-sky-500/15';
     return 'bg-orange-500/15';
   };
 
@@ -286,6 +378,7 @@ export default function Applications() {
     if (status === 'approved') return 'text-emerald-400';
     if (status === 'pending') return 'text-amber-400';
     if (status === 'rejected') return 'text-rose-400';
+    if (status === 'transferred') return 'text-sky-400';
     return 'text-orange-400';
   };
 
@@ -470,6 +563,16 @@ export default function Applications() {
                             审批人：<span className="text-slate-300">{app.approverName}</span>
                           </div>
                         )}
+                        {app.currentHandlerName && (
+                          <div className="flex items-center gap-1.5 text-slate-500">
+                            <Forward className="w-3.5 h-3.5 text-sky-400" />
+                            当前处理人：<span className="text-slate-300">{app.currentHandlerName}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <ShieldAlert className="w-3.5 h-3.5 text-teal-400" />
+                          提交次数：<span className="text-slate-300">第 {app.submissionCount} 次</span>
+                        </div>
                       </div>
                     </div>
 
@@ -523,7 +626,7 @@ export default function Applications() {
 
                     {canApprove && (
                       <div className="space-y-3">
-                        <div className="flex items-center gap-2 pt-2 border-t border-white/[0.06]">
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.06]">
                           <span className="text-xs text-slate-500">审批操作：</span>
                           <button
                             onClick={() => approveApplication(app.id)}
@@ -539,7 +642,63 @@ export default function Applications() {
                             <XCircle className="w-3.5 h-3.5" />
                             驳回
                           </button>
+                          <button
+                            onClick={() => {
+                              setTransferId(app.id);
+                              setTransferHandler('');
+                              setTransferReason('');
+                            }}
+                            className="text-xs px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-1.5 bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:bg-sky-500/15"
+                          >
+                            <Forward className="w-3.5 h-3.5" />
+                            转派
+                          </button>
                         </div>
+
+                        {transferId === app.id ? (
+                          <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 fade-in-up">
+                            <div className="text-xs text-sky-300 mb-3 flex items-center gap-1.5">
+                              <Forward className="w-3.5 h-3.5" />
+                              转派审批给其他负责人
+                            </div>
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={transferHandler}
+                                onChange={(e) => setTransferHandler(e.target.value)}
+                                placeholder="请输入新处理人姓名..."
+                                className="w-full px-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-sky-500/40 transition-all"
+                                autoFocus
+                              />
+                              <input
+                                type="text"
+                                value={transferReason}
+                                onChange={(e) => setTransferReason(e.target.value)}
+                                placeholder="请输入转派原因..."
+                                className="w-full px-4 py-2.5 rounded-xl bg-slate-950/50 border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-sky-500/40 transition-all"
+                              />
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  onClick={() => handleTransfer(app.id)}
+                                  className="px-4 py-2.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sm text-sky-300 hover:bg-sky-500/25 transition-all flex items-center gap-1.5"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                  确认转派
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setTransferId(null);
+                                    setTransferHandler('');
+                                    setTransferReason('');
+                                  }}
+                                  className="text-xs px-4 py-2.5 rounded-xl font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                                >
+                                  取消
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08]">
                           <div className="text-xs text-slate-500 mb-2">添加审批意见：</div>

@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { owners } from '@/data/owners';
 import SensitivityBadge from '@/components/SensitivityBadge';
 import AssetTypeBadge from '@/components/AssetTypeBadge';
 import { cn } from '@/lib/utils';
-import { X, GitCompare, Trash2, User, Eye, Database, Search, Columns, Diff } from 'lucide-react';
+import { X, GitCompare, Trash2, User, Eye, Database, Search, Columns, Diff, Target, CheckCircle2, AlertTriangle, FileCheck, Copy } from 'lucide-react';
 import type { DataAsset, Field, SensitivityLevel } from '@/types';
 
 function getOwnerName(ownerId: string) {
@@ -57,6 +57,17 @@ export default function ComparePanel() {
     .map((id) => assets.find((a) => a.id === id))
     .filter((a): a is NonNullable<typeof a> => a !== undefined);
 
+  const baselineInitId = compareIds.find((id) => assets.some((a) => a.id === id)) || null;
+  const [baseline, setBaseline] = useState<string | null>(baselineInitId);
+  useEffect(() => {
+    if (baseline && !compareIds.includes(baseline)) {
+      setBaseline(compareIds[0] ?? null);
+    } else if (!baseline && compareIds[0]) {
+      setBaseline(compareIds[0]);
+    }
+  }, [compareIds, baseline]);
+  const baselineAsset = useMemo(() => compareAssets.find((a) => a.id === baseline), [compareAssets, baseline]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -100,6 +111,115 @@ export default function ComparePanel() {
   const hasVisitDiff = maxVisit !== minVisit;
   const maxVisitAsset = compareAssets.find((a) => a.visitCount === maxVisit);
   const minVisitAsset = compareAssets.find((a) => a.visitCount === minVisit);
+
+  interface AddedMissingFieldItem {
+    fieldName: string;
+    hasAssets: string[];
+    missingAssets: string[];
+  }
+  interface TypeChangedFieldItem {
+    fieldName: string;
+    baselineType: string;
+    comparisons: { assetName: string; type: string }[];
+  }
+  interface SensitivityElevatedFieldItem {
+    fieldName: string;
+    baselineSensitivity: SensitivityLevel;
+    comparisons: { assetName: string; sensitivity: SensitivityLevel }[];
+  }
+
+  const { addedMissingFields, typeChangedFields, sensitivityElevatedFields } = useMemo(() => {
+    const addedMissing: AddedMissingFieldItem[] = [];
+    const typeChanged: TypeChangedFieldItem[] = [];
+    const sensitivityElevated: SensitivityElevatedFieldItem[] = [];
+
+    if (!baselineAsset) {
+      return { addedMissingFields: addedMissing, typeChangedFields: typeChanged, sensitivityElevatedFields: sensitivityElevated };
+    }
+
+    for (const fieldName of displayedFieldNames) {
+      const baselineField = baselineAsset.fields.find((f) => f.name === fieldName);
+      const hasAssets: string[] = [];
+      const missingAssets: string[] = [];
+
+      for (const asset of compareAssets) {
+        const f = asset.fields.find((f) => f.name === fieldName);
+        if (f) {
+          hasAssets.push(asset.name);
+        } else {
+          missingAssets.push(asset.name);
+        }
+      }
+
+      if (hasAssets.length > 0 && missingAssets.length > 0) {
+        addedMissing.push({ fieldName, hasAssets, missingAssets });
+      }
+
+      if (baselineField) {
+        const typeComparisons: { assetName: string; type: string }[] = [];
+        for (const asset of compareAssets) {
+          if (asset.id === baselineAsset.id) continue;
+          const f = asset.fields.find((f) => f.name === fieldName);
+          if (f && f.type !== baselineField.type) {
+            typeComparisons.push({ assetName: asset.name, type: f.type });
+          }
+        }
+        if (typeComparisons.length > 0) {
+          typeChanged.push({ fieldName, baselineType: baselineField.type, comparisons: typeComparisons });
+        }
+
+        const sensComparisons: { assetName: string; sensitivity: SensitivityLevel }[] = [];
+        const baselineRank = sensitivityRank(baselineField.sensitivity);
+        for (const asset of compareAssets) {
+          if (asset.id === baselineAsset.id) continue;
+          const f = asset.fields.find((f) => f.name === fieldName);
+          if (f && sensitivityRank(f.sensitivity) > baselineRank) {
+            sensComparisons.push({ assetName: asset.name, sensitivity: f.sensitivity });
+          }
+        }
+        if (sensComparisons.length > 0) {
+          sensitivityElevated.push({
+            fieldName,
+            baselineSensitivity: baselineField.sensitivity,
+            comparisons: sensComparisons,
+          });
+        }
+      }
+    }
+
+    return { addedMissingFields: addedMissing, typeChangedFields: typeChanged, sensitivityElevatedFields: sensitivityElevated };
+  }, [displayedFieldNames, compareAssets, baselineAsset]);
+
+  const diffCount = displayedFieldNames.length;
+  const totalFields = allFieldNames.length;
+  const diffRatio = totalFields > 0 ? diffCount / totalFields : 0;
+  const overallAssessment = diffRatio <= 0.2 ? '高度一致' : diffRatio <= 0.6 ? '部分重叠' : '差异显著';
+  const assessmentIcon = overallAssessment === '高度一致' ? CheckCircle2 : overallAssessment === '部分重叠' ? FileCheck : AlertTriangle;
+  const assessmentColor = overallAssessment === '高度一致' ? 'emerald' : overallAssessment === '部分重叠' ? 'sky' : 'amber';
+
+  const hasSensitivityElevation = useMemo(() => {
+    if (!baselineAsset) return false;
+    return compareAssets.some((a) => {
+      if (a.id === baselineAsset.id) return false;
+      return sensitivityRank(a.sensitivity) > sensitivityRank(baselineAsset.sensitivity);
+    });
+  }, [compareAssets, baselineAsset]);
+
+  const reuseSuggestion = useMemo(() => {
+    const scored = compareAssets.map((asset) => ({
+      asset,
+      visitScore: asset.visitCount,
+      fieldScore: asset.fields.length,
+      combined: asset.visitCount * 0.5 + asset.fields.length * 1000,
+    }));
+    scored.sort((a, b) => b.combined - a.combined);
+    const best = scored[0];
+    if (!best) return null;
+    const reason = best.asset.fields.length >= Math.max(...compareAssets.map((a) => a.fields.length))
+      ? '字段完整且访问稳定'
+      : '访问热度高';
+    return { asset: best.asset, reason };
+  }, [compareAssets]);
 
   return (
     <>
@@ -223,28 +343,53 @@ export default function ComparePanel() {
             className="grid gap-4"
             style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}
           >
-            {compareAssets.map((asset) => (
-              <div
-                key={asset.id}
-                className="glass-card p-4 rounded-xl bg-white/5 border border-white/10 space-y-2"
-              >
-                <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-semibold text-white truncate pr-2">
-                    {asset.name}
-                  </h3>
-                  <button
-                    onClick={() => removeFromCompare(asset.id)}
-                    className="p-1 rounded hover:bg-white/10 text-slate-500 hover:text-rose-400 transition-colors shrink-0"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+            {compareAssets.map((asset) => {
+              const isBaseline = asset.id === baseline;
+              return (
+                <div
+                  key={asset.id}
+                  className={cn(
+                    'glass-card p-4 rounded-xl bg-white/5 space-y-2 transition-all relative',
+                    isBaseline
+                      ? 'border-2 border-cyan-400/60 shadow-[0_0_15px_rgba(34,211,238,0.15)]'
+                      : 'border border-white/10'
+                  )}
+                >
+                  {isBaseline && (
+                    <div className="absolute -top-2 left-3 px-2 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-[10px] font-medium text-cyan-300 flex items-center gap-1">
+                      <Target className="w-3 h-3" />
+                      基准资产
+                    </div>
+                  )}
+                  <div className="flex items-start justify-between gap-1">
+                    <h3 className="text-sm font-semibold text-white truncate pr-2 flex-1">
+                      {asset.name}
+                    </h3>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {!isBaseline && (
+                        <button
+                          onClick={() => setBaseline(asset.id)}
+                          title="设为基准"
+                          className="p-1 rounded hover:bg-cyan-500/20 text-slate-500 hover:text-cyan-400 transition-colors"
+                        >
+                          <Target className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => removeFromCompare(asset.id)}
+                        className="p-1 rounded hover:bg-white/10 text-slate-500 hover:text-rose-400 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <AssetTypeBadge type={asset.type} />
+                    <SensitivityBadge level={asset.sensitivity} size="sm" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <AssetTypeBadge type={asset.type} />
-                  <SensitivityBadge level={asset.sensitivity} size="sm" />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Owner / Visit / Row Info */}
@@ -297,6 +442,116 @@ export default function ComparePanel() {
               </div>
             ))}
           </div>
+
+          {/* Decision Assistant Summary Card (only in diff mode with diff fields) */}
+          {viewMode === 'diff' && displayedFieldNames.length > 0 && baselineAsset && (
+            <div className="relative rounded-xl overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 via-violet-500/15 to-fuchsia-500/20 rounded-xl" />
+              <div className="absolute inset-0 rounded-xl border border-cyan-400/20" />
+              <div className="relative p-4 space-y-4 glass-card bg-slate-900/40 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-cyan-500/30 to-violet-500/30 border border-cyan-400/30">
+                    <Target className="w-4 h-4 text-cyan-300" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white">决策助手</h3>
+                  <span className="text-[11px] text-slate-400 ml-1">
+                    以 <span className="text-cyan-300">{baselineAsset.name}</span> 为基准
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {addedMissingFields.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-medium text-sky-300 flex items-center gap-1">
+                        <Database className="w-3 h-3" />
+                        字段新增/缺失 ({addedMissingFields.length})
+                      </div>
+                      <div className="space-y-1">
+                        {addedMissingFields.map((item) => (
+                          <div key={item.fieldName} className="text-xs text-slate-300 flex items-start gap-1.5 pl-1">
+                            <span className="text-sky-400 shrink-0 mt-0.5">[增减]</span>
+                            <span>
+                              <code className="text-sky-200 font-mono text-[11px]">{item.fieldName}</code>
+                              <span className="text-slate-400">: </span>
+                              <span className="text-emerald-300">{item.hasAssets.join('、')} 有</span>
+                              <span className="text-slate-400">，</span>
+                              <span className="text-rose-300">{item.missingAssets.join('、')} 无</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {typeChangedFields.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-medium text-violet-300 flex items-center gap-1">
+                        <Columns className="w-3 h-3" />
+                        字段类型变化 ({typeChangedFields.length})
+                      </div>
+                      <div className="space-y-1">
+                        {typeChangedFields.map((item) => (
+                          <div key={item.fieldName} className="text-xs text-slate-300 flex items-start gap-1.5 pl-1">
+                            <span className="text-violet-400 shrink-0 mt-0.5">[类型变]</span>
+                            <span>
+                              <code className="text-violet-200 font-mono text-[11px]">{item.fieldName}</code>
+                              <span className="text-slate-400">: </span>
+                              <span>{baselineAsset.name}</span>
+                              <code className="text-slate-200 font-mono text-[11px] mx-1">({item.baselineType})</code>
+                              <span className="text-slate-400">→</span>
+                              {item.comparisons.map((c, i) => (
+                                <span key={c.assetName}>
+                                  <span className="mx-1">{c.assetName}</span>
+                                  <code className="text-amber-300 font-mono text-[11px]">({c.type})</code>
+                                  {i < item.comparisons.length - 1 && <span className="text-slate-500 mx-0.5">/</span>}
+                                </span>
+                              ))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {sensitivityElevatedFields.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-medium text-rose-300 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        敏感等级升高 ({sensitivityElevatedFields.length})
+                      </div>
+                      <div className="space-y-1">
+                        {sensitivityElevatedFields.map((item) => (
+                          <div key={item.fieldName} className="text-xs text-slate-300 flex items-start gap-1.5 pl-1">
+                            <span className="text-rose-400 shrink-0 mt-0.5">[敏感升]</span>
+                            <span>
+                              <code className="text-rose-200 font-mono text-[11px]">{item.fieldName}</code>
+                              <span className="text-slate-400">: </span>
+                              <span>{baselineAsset.name}</span>
+                              <span className="text-slate-200 mx-1">({sensitivityLabel(item.baselineSensitivity)})</span>
+                              <span className="text-slate-400">→</span>
+                              {item.comparisons.map((c, i) => (
+                                <span key={c.assetName}>
+                                  <span className="mx-1">{c.assetName}</span>
+                                  <span className="text-rose-300">({sensitivityLabel(c.sensitivity)})</span>
+                                  {i < item.comparisons.length - 1 && <span className="text-slate-500 mx-0.5">/</span>}
+                                </span>
+                              ))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {addedMissingFields.length === 0 && typeChangedFields.length === 0 && sensitivityElevatedFields.length === 0 && (
+                    <div className="text-xs text-slate-400 italic">
+                      无显著分类差异
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Diff Summary (only in diff mode) */}
           {viewMode === 'diff' && (
@@ -437,6 +692,174 @@ export default function ComparePanel() {
               </div>
             )}
           </div>
+
+          {/* Conclusion Card (only in diff mode) */}
+          {viewMode === 'diff' && (
+            <div className="relative rounded-xl overflow-hidden">
+              <div
+                className="absolute inset-0 rounded-xl opacity-60"
+                style={{
+                  background:
+                    assessmentColor === 'emerald'
+                      ? 'linear-gradient(135deg, rgba(16,185,129,0.35) 0%, rgba(34,211,238,0.2) 50%, rgba(139,92,246,0.25) 100%)'
+                      : assessmentColor === 'sky'
+                      ? 'linear-gradient(135deg, rgba(56,189,248,0.3) 0%, rgba(139,92,246,0.25) 50%, rgba(236,72,153,0.2) 100%)'
+                      : 'linear-gradient(135deg, rgba(245,158,11,0.3) 0%, rgba(244,63,94,0.25) 50%, rgba(168,85,247,0.2) 100%)',
+                }}
+              />
+              <div className="absolute inset-0 rounded-xl border border-white/10 pointer-events-none" />
+              <div className="relative p-4 glass-card bg-slate-900/50 rounded-xl space-y-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={cn(
+                        'p-1.5 rounded-lg border',
+                        assessmentColor === 'emerald' && 'bg-emerald-500/20 border-emerald-400/30',
+                        assessmentColor === 'sky' && 'bg-sky-500/20 border-sky-400/30',
+                        assessmentColor === 'amber' && 'bg-amber-500/20 border-amber-400/30'
+                      )}
+                    >
+                      {(() => {
+                        const Icon = assessmentIcon;
+                        return (
+                          <Icon
+                            className={cn(
+                              'w-4 h-4',
+                              assessmentColor === 'emerald' && 'text-emerald-300',
+                              assessmentColor === 'sky' && 'text-sky-300',
+                              assessmentColor === 'amber' && 'text-amber-300'
+                            )}
+                          />
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
+                          <FileCheck className="w-4 h-4 text-slate-300" />
+                          对比结论
+                        </h3>
+                        <span
+                          className={cn(
+                            'px-2 py-0.5 rounded-full text-[10px] font-medium border',
+                            assessmentColor === 'emerald' && 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+                            assessmentColor === 'sky' && 'bg-sky-500/15 text-sky-300 border-sky-400/30',
+                            assessmentColor === 'amber' && 'bg-amber-500/15 text-amber-300 border-amber-400/30'
+                          )}
+                        >
+                          {overallAssessment}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        差异字段 {diffCount}/{totalFields} · 差异率 {(diffRatio * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                    title="复制结论"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid gap-2 text-xs">
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-500 shrink-0 w-16">总体评价:</span>
+                    <span
+                      className={cn(
+                        'font-medium',
+                        assessmentColor === 'emerald' && 'text-emerald-300',
+                        assessmentColor === 'sky' && 'text-sky-300',
+                        assessmentColor === 'amber' && 'text-amber-300'
+                      )}
+                    >
+                      {overallAssessment}
+                      <span className="text-slate-400 font-normal">
+                        {' '}
+                        - {overallAssessment === '高度一致' ? '字段结构和属性高度相似，可灵活选择复用' : overallAssessment === '部分重叠' ? '存在一定差异，需根据业务场景确认选择' : '差异较大，建议仔细评估后选择'}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-500 shrink-0 w-16">敏感风险:</span>
+                    {hasSensitivityElevation ? (
+                      <span className="text-rose-300">
+                        <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5" />
+                        部分资产敏感等级高于基准，需关注权限合规
+                      </span>
+                    ) : (
+                      <span className="text-emerald-300">
+                        <CheckCircle2 className="w-3 h-3 inline mr-1 -mt-0.5" />
+                        敏感等级一致或低于基准，风险可控
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-500 shrink-0 w-16">复用建议:</span>
+                    {reuseSuggestion ? (
+                      <span className="text-cyan-300">
+                        建议优先复用 <span className="font-semibold text-white">{reuseSuggestion.asset.name}</span>
+                        <span className="text-slate-400">（{reuseSuggestion.reason}）</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">数据不足，暂无法建议</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/5 space-y-1.5">
+                  <div className="text-[11px] font-medium text-slate-400 mb-1">快速要点</div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-slate-500 mt-0.5">·</span>
+                      <span className="text-slate-300">
+                        字段差异数: <span className="text-white font-medium">{diffCount}</span> 项
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-slate-500 mt-0.5">·</span>
+                      <span className="text-slate-300">
+                        最大访问差:{' '}
+                        <span className="text-white font-medium">
+                          {hasVisitDiff ? (maxVisit - minVisit).toLocaleString() : '0'}
+                        </span>
+                        {hasVisitDiff && maxVisitAsset && minVisitAsset && (
+                          <span className="text-slate-500 ml-1">
+                            ({maxVisitAsset.name} vs {minVisitAsset.name})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-slate-500 mt-0.5">·</span>
+                      <span className="text-slate-300">
+                        负责人情况:{' '}
+                        {hasOwnerDiff ? (
+                          <span className="text-amber-300">存在差异</span>
+                        ) : (
+                          <span className="text-emerald-300">一致</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-slate-500 mt-0.5">·</span>
+                      <span className="text-slate-300">
+                        敏感等级变化:{' '}
+                        {hasSensitivityElevation ? (
+                          <span className="text-rose-300">有升高</span>
+                        ) : (
+                          <span className="text-emerald-300">无升高</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

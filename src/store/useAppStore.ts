@@ -30,6 +30,7 @@ interface AppStore {
   rejectApplication: (id: string) => void;
   addApprovalComment: (id: string, comment: string) => void;
   resubmitApplication: (id: string, supplement: string) => void;
+  transferApplication: (id: string, handlerName: string, reason: string) => void;
   getAssetById: (id: string) => DataAsset | undefined;
   filteredAssets: () => DataAsset[];
 
@@ -59,19 +60,30 @@ const saveFavorites = (ids: string[]) => {
   }
 };
 
+const normalizeApplication = (app: any): Application => {
+  const normalized = { ...app };
+  if (typeof normalized.submissionCount !== 'number') {
+    const submitEvents = normalized.timeline?.filter(
+      (e: any) => e.type === 'submit' || e.type === 'resubmit'
+    ) || [];
+    normalized.submissionCount = submitEvents.length || 1;
+  }
+  return normalized as Application;
+};
+
 const loadApplications = (): Application[] => {
   try {
     const stored = localStorage.getItem('data-asset-applications');
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map(normalizeApplication);
       }
     }
   } catch {
     // ignore
   }
-  return initialApplications;
+  return initialApplications.map(normalizeApplication);
 };
 
 const saveApplications = (apps: Application[]) => {
@@ -134,7 +146,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
       duration: data.duration,
       submitTime,
       status: 'pending',
-      timeline: [{ type: 'submit', time: submitTime, actorName: applicantName, comment: data.purpose }],
+      submissionCount: 1,
+      timeline: [{
+        type: 'submit',
+        time: submitTime,
+        actorName: applicantName,
+        comment: data.purpose,
+        role: 'applicant',
+        submissionNumber: 1,
+      }],
     };
     const newApps = [newApp, ...get().applications];
     saveApplications(newApps);
@@ -164,7 +184,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
             approverId: 'current-owner',
             approverName,
             approvalTime: now,
-            timeline: [...app.timeline, { type: 'approve' as const, time: now, actorName: approverName }],
+            timeline: [...app.timeline, {
+              type: 'approve' as const,
+              time: now,
+              actorName: approverName,
+              role: 'approver' as const,
+            }],
           }
         : app
     );
@@ -183,7 +208,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
             approverId: 'current-owner',
             approverName,
             approvalTime: now,
-            timeline: [...app.timeline, { type: 'reject' as const, time: now, actorName: approverName }],
+            timeline: [...app.timeline, {
+              type: 'reject' as const,
+              time: now,
+              actorName: approverName,
+              role: 'approver' as const,
+            }],
           }
         : app
     );
@@ -194,14 +224,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
   addApprovalComment: (id: string, comment: string) => {
     const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
     const actorName = '当前负责人';
-    const newApps = get().applications.map((app) =>
-      app.id === id
-        ? {
-            ...app,
-            timeline: [...app.timeline, { type: 'comment' as const, time: now, actorName, comment }],
-          }
-        : app
-    );
+    const newApps = get().applications.map((app) => {
+      if (app.id !== id) return app;
+      const isApplicant = actorName === app.applicantName;
+      const role: 'applicant' | 'approver' = isApplicant ? 'applicant' : 'approver';
+      return {
+        ...app,
+        timeline: [...app.timeline, {
+          type: 'comment' as const,
+          time: now,
+          actorName,
+          comment,
+          role,
+        }],
+      };
+    });
     saveApplications(newApps);
     set({ applications: newApps });
   },
@@ -209,15 +246,47 @@ export const useAppStore = create<AppStore>((set, get) => ({
   resubmitApplication: (id: string, supplement: string) => {
     const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
     const applicantName = '当前用户';
+    const newApps = get().applications.map((app) => {
+      if (app.id !== id) return app;
+      const newSubmissionCount = app.submissionCount + 1;
+      return {
+        ...app,
+        status: 'resubmitted' as const,
+        approverId: undefined,
+        approverName: undefined,
+        approvalTime: undefined,
+        submissionCount: newSubmissionCount,
+        timeline: [...app.timeline, {
+          type: 'resubmit' as const,
+          time: now,
+          actorName: applicantName,
+          comment: supplement,
+          role: 'applicant' as const,
+          submissionNumber: newSubmissionCount,
+        }],
+      };
+    });
+    saveApplications(newApps);
+    set({ applications: newApps });
+  },
+
+  transferApplication: (id: string, handlerName: string, reason: string) => {
+    const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+    const actorName = '当前负责人';
     const newApps = get().applications.map((app) =>
       app.id === id
         ? {
             ...app,
-            status: 'resubmitted' as const,
-            approverId: undefined,
-            approverName: undefined,
-            approvalTime: undefined,
-            timeline: [...app.timeline, { type: 'resubmit' as const, time: now, actorName: applicantName, comment: supplement }],
+            status: 'transferred' as const,
+            currentHandlerName: handlerName,
+            timeline: [...app.timeline, {
+              type: 'transfer' as const,
+              time: now,
+              actorName,
+              comment: reason,
+              role: 'approver' as const,
+              transferTo: handlerName,
+            }],
           }
         : app
     );

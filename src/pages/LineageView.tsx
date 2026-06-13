@@ -5,23 +5,55 @@ import { useAppStore } from '@/store/useAppStore';
 import SensitivityBadge from '@/components/SensitivityBadge';
 import AssetTypeBadge, { typeConfig } from '@/components/AssetTypeBadge';
 import {
-  ArrowLeft,
-  ChevronRight,
-  ZoomIn,
-  ZoomOut,
-  Maximize,
-  Layers,
-  ArrowRightLeft,
-  Database,
-  BarChart3,
-  PlugZap,
-  X,
-  ArrowRight,
-  GitBranch,
-  History,
+  ArrowLeft, ChevronRight as ChevronRightSep, ZoomIn, ZoomOut, Maximize, Layers,
+  ArrowRightLeft, Database, BarChart3, PlugZap, X, ArrowRight, GitBranch,
+  History, ChevronLeft, ChevronRight, Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LineageNode } from '@/types';
+import type { LineageNode, SensitivityLevel, AssetType } from '@/types';
+
+const RECENT_KEY = 'lineage-recent-visits';
+const MAX_RECENT = 10;
+const MAX_RECENT_DISPLAY = 5;
+
+interface RecentVisit {
+  id: string;
+  timestamp: number;
+}
+
+function loadRecent(): RecentVisit[] {
+  try {
+    const raw = sessionStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v) => v && typeof v.id === 'string' && typeof v.timestamp === 'number');
+  } catch {
+    return [];
+  }
+}
+
+function saveRecent(visits: RecentVisit[]) {
+  try {
+    sessionStorage.setItem(RECENT_KEY, JSON.stringify(visits));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 5) return '刚刚';
+  if (sec < 60) return `${sec}秒前`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}小时前`;
+  const day = Math.floor(hr / 24);
+  return `${day}天前`;
+}
 
 const iconMap = {
   table: Database,
@@ -39,22 +71,58 @@ export default function LineageView() {
   const [direction, setDirection] = useState<'both' | 'upstream' | 'downstream'>('both');
   const [selectedNode, setSelectedNode] = useState<LineageNode | null>(null);
   const [viewBox, setViewBox] = useState({ x: -400, y: -200, w: 1600, h: 600 });
+
   const historyRef = useRef<string[]>(id ? [id] : []);
   const [history, setHistory] = useState<string[]>(id ? [id] : []);
+  const forwardRef = useRef<string[]>([]);
+  const [forward, setForward] = useState<string[]>([]);
+
+  const [recents, setRecents] = useState<RecentVisit[]>(() => loadRecent());
+  const [recentDropdownOpen, setRecentDropdownOpen] = useState(false);
+  const recentDropdownRef = useRef<HTMLDivElement>(null);
 
   const lineageData = useMemo(() => (id ? getLineageData(id) : null), [id]);
   const centerAsset = id ? getAssetById(id) : undefined;
 
   useEffect(() => {
     if (!id) return;
+
     const h = historyRef.current;
     const idx = h.indexOf(id);
+
     if (idx !== -1) {
-      historyRef.current = h.slice(0, idx + 1);
+      if (idx === h.length - 1) {
+        // id 在 history 末尾，什么也不做
+      } else {
+        // 回退操作：截断 history 到该位置，把截断部分移到 forward
+        const removed = h.slice(idx + 1);
+        historyRef.current = h.slice(0, idx + 1);
+        forwardRef.current = [...removed, ...forwardRef.current];
+      }
     } else {
-      historyRef.current = [...h, id];
+      // id 不在 history 中
+      const f = forwardRef.current;
+      if (f.length > 0 && f[0] === id) {
+        // 从 forward 前进
+        historyRef.current = [...h, id];
+        forwardRef.current = f.slice(1);
+      } else {
+        // 新节点：push 到 history 末尾，清空 forward
+        historyRef.current = [...h, id];
+        forwardRef.current = [];
+      }
     }
+
     setHistory([...historyRef.current]);
+    setForward([...forwardRef.current]);
+
+    // 更新最近查看记录
+    const now = Date.now();
+    let newRecents = recents.filter((v) => v.id !== id);
+    newRecents = [{ id, timestamp: now }, ...newRecents].slice(0, MAX_RECENT);
+    setRecents(newRecents);
+    saveRecent(newRecents);
+
     const meta = assetMeta[id];
     setSelectedNode({
       id,
@@ -62,10 +130,41 @@ export default function LineageView() {
       type: meta ? meta.type : 'table',
       layer: 0,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        recentDropdownRef.current &&
+        !recentDropdownRef.current.contains(e.target as Node)
+      ) {
+        setRecentDropdownOpen(false);
+      }
+    }
+    if (recentDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [recentDropdownOpen]);
+
+  const canGoBack = history.length > 1;
+  const canGoForward = forward.length > 0;
+
+  const handleBack = () => {
+    if (!canGoBack) return;
+    const prevId = history[history.length - 2];
+    navigate(`/lineage/${prevId}`);
+  };
+
+  const handleForward = () => {
+    if (!canGoForward) return;
+    const nextId = forward[0];
+    navigate(`/lineage/${nextId}`);
+  };
+
   const layout = useMemo(() => {
-    if (!lineageData) return { nodes: [], edges: [] };
+    if (!lineageData) return { nodes: [], edges: [], positioned: {}, NODE_W: 0, NODE_H: 0 };
 
     const maxLayer = Math.abs(depth);
     let nodes = lineageData.nodes;
@@ -137,6 +236,23 @@ export default function LineageView() {
 
   const panelOpen = selectedNode !== null;
 
+  const recentDisplayList = useMemo(() => {
+    return recents
+      .filter((v) => v.id !== id)
+      .slice(0, MAX_RECENT_DISPLAY)
+      .map((v) => {
+        const meta = assetMeta[v.id];
+        const asset = getAssetById(v.id);
+        return {
+          id: v.id,
+          name: meta ? meta.name : v.id,
+          type: (meta ? meta.type : 'table') as AssetType,
+          sensitivity: asset?.sensitivity as SensitivityLevel | undefined,
+          time: formatRelativeTime(v.timestamp),
+        };
+      });
+  }, [recents, id, getAssetById]);
+
   return (
     <div className="space-y-5 h-[calc(100vh-160px)] flex flex-col">
       <div className="flex items-center gap-4">
@@ -149,14 +265,82 @@ export default function LineageView() {
         </button>
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <Link to="/" className="hover:text-cyan-300 transition-colors">资产地图</Link>
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRightSep className="w-3.5 h-3.5" />
           {centerAsset && (
             <>
               <Link to={`/assets/${id}`} className="hover:text-cyan-300 transition-colors">{centerAsset.name}</Link>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRightSep className="w-3.5 h-3.5" />
             </>
           )}
           <span className="text-violet-300 font-medium">血缘视图</span>
+        </div>
+        <div className="relative" ref={recentDropdownRef}>
+          <button
+            onClick={() => setRecentDropdownOpen((v) => !v)}
+            className={cn(
+              'w-9 h-9 rounded-xl flex items-center justify-center transition-all',
+              recentDropdownOpen
+                ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'
+                : 'bg-white/[0.03] border border-white/[0.08] text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 hover:bg-cyan-500/5'
+            )}
+            title="最近查看"
+          >
+            <Clock className="w-4 h-4" />
+          </button>
+          {recentDropdownOpen && (
+            <div className="absolute top-11 left-0 z-50 w-[340px] glass-card border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-xs font-semibold text-slate-200">最近查看</span>
+                <span className="text-[10px] text-slate-500 ml-auto">最多 {MAX_RECENT_DISPLAY} 条</span>
+              </div>
+              {recentDisplayList.length === 0 ? (
+                <div className="px-4 py-8 text-center text-xs text-slate-500">暂无最近查看记录</div>
+              ) : (
+                <div className="max-h-[340px] overflow-y-auto custom-scrollbar">
+                  {recentDisplayList.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setRecentDropdownOpen(false);
+                        navigate(`/lineage/${item.id}`);
+                      }}
+                      className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-white/[0.04] transition-all border-b border-white/[0.03] last:border-b-0"
+                    >
+                      <div className={cn(
+                        'w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white',
+                        typeConfig[item.type].bgClass
+                      )}>
+                        {item.type === 'table' && <Database className="w-4 h-4" />}
+                        {item.type === 'report' && <BarChart3 className="w-4 h-4" />}
+                        {item.type === 'api' && <PlugZap className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-slate-200 truncate mb-1">{item.name}</div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded-md border', typeConfig[item.type].className)}>
+                            {typeConfig[item.type].label}
+                          </span>
+                          {item.sensitivity && (
+                            <span className={cn(
+                              'text-[10px] px-1.5 py-0.5 rounded-md border',
+                              item.sensitivity === 'high' && 'bg-rose-500/10 text-rose-300 border-rose-500/30',
+                              item.sensitivity === 'medium' && 'bg-violet-500/10 text-violet-300 border-violet-500/30',
+                              item.sensitivity === 'low' && 'bg-sky-500/10 text-sky-300 border-sky-500/30',
+                              item.sensitivity === 'public' && 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+                            )}>
+                              {item.sensitivity === 'high' ? '高' : item.sensitivity === 'medium' ? '中' : item.sensitivity === 'low' ? '低' : '公'}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 ml-1">{item.time}</span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -182,7 +366,7 @@ export default function LineageView() {
                   const isCurrent = idx === history.length - 1;
                   return (
                     <div key={hid} className="flex items-center gap-1 shrink-0">
-                      {idx > 0 && <ChevronRight className="w-3 h-3 text-slate-600" />}
+                      {idx > 0 && <ChevronRightSep className="w-3 h-3 text-slate-600" />}
                       <button
                         onClick={() => navigate(`/lineage/${hid}`)}
                         className={cn(
@@ -256,26 +440,56 @@ export default function LineageView() {
               </div>
             </div>
 
-            <div className="ml-auto flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08]">
-              <button
-                onClick={() => handleZoom(1.2)}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] flex items-center justify-center transition-all"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleZoom(0.8)}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] flex items-center justify-center transition-all"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <div className="w-px h-5 bg-white/10 mx-1" />
-              <button
-                onClick={resetView}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] flex items-center justify-center transition-all"
-              >
-                <Maximize className="w-4 h-4" />
-              </button>
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+                <button
+                  onClick={handleBack}
+                  disabled={!canGoBack}
+                  className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
+                    canGoBack
+                      ? 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
+                      : 'text-slate-600 cursor-not-allowed opacity-50'
+                  )}
+                  title="后退"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleForward}
+                  disabled={!canGoForward}
+                  className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
+                    canGoForward
+                      ? 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
+                      : 'text-slate-600 cursor-not-allowed opacity-50'
+                  )}
+                  title="前进"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+                <button
+                  onClick={() => handleZoom(1.2)}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] flex items-center justify-center transition-all"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleZoom(0.8)}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] flex items-center justify-center transition-all"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <div className="w-px h-5 bg-white/10 mx-1" />
+                <button
+                  onClick={resetView}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] flex items-center justify-center transition-all"
+                >
+                  <Maximize className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
